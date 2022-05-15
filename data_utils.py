@@ -10,6 +10,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
+import librosa
+import copy
 
 # binary tab -----------------------------------------------------------------
 def tabFrame2binary(t):
@@ -116,6 +118,32 @@ def tablature2tokens(p, compount=True):
     s.append('<EOS>')
     return s
 
+# event 2 full tab ---------------------------------------------------------
+def event2fulltab(e):
+    t = np.zeros( (6,25) )
+    for p in e['pitches']:
+        if p['fret'] < 25:
+            t[ p['string']-1 , p['fret'] ] = 1
+    return t
+# end event2fulltab
+def plotEvent(e):
+    t = event2fulltab(e)
+    plt.imshow(t, cmap='gray_r')
+    return t
+# end plotEvent
+
+def patternOf2DTab(t):
+    p = copy.deepcopy(t)
+    if np.sum(p) != 0:
+        while np.sum(p[:,0]) == 0:
+            p = np.roll( p, -1, axis=1 )
+    return p
+# end patternOf2DTab
+
+def plotTab(t):
+    plt.imshow(t, cmap='gray_r')
+# end plotEvent
+        
 # %% plottings
 def plot_full_tabs(t, titles=None):
     for i in range(t.shape[0]):
@@ -155,7 +183,63 @@ class Constants:
         self.analysis_samples = analysis_samples
         self.ticks_per_quarter = ticks_per_quarter
     # end init
+    
+    def secs2samples(self, secs):
+        return np.floor( secs*self.sample_rate ).astype(int)
+    # end secs2samples
 # end Constants
+
+class GuitarSamples:
+    def __init__(self, name, constants=None):
+        self.name = name
+        self.samples = {}
+        if constants is None:
+            self.constants = Constants()
+        else:
+            self.constants = constants
+    # end init
+    
+    def append_sample(self, string, fret, audio_path, onset_path):
+        # load audio
+        s, _ = librosa.load( audio_path , sr=self.constants.sample_rate )
+        # load onset info
+        with open(onset_path, 'r') as f:
+            onsetsec = float(f.read())
+            onsetidx = np.floor(onsetsec*self.constants.sample_rate).astype(int)
+            # minus25idx = int(0.025*self.constants.sample_rate)
+        if str(string) in self.samples.keys():
+            if str(fret) in self.samples[str(string)].keys():
+                self.samples[str(string)][str(fret)].append( s[onsetidx:] )
+            else:
+                self.samples[str(string)][str(fret)] = [ s[onsetidx:] ]
+        else:
+            self.samples[str(string)] = {}
+            self.samples[str(string)][str(fret)] = [ s[onsetidx:] ]
+    # end append_sample
+    
+    def augment_octaves(self):
+        for sidx in range(1, 7, 1):
+            for fidx in range(1, 13, 1):
+                self.samples[ str(sidx) ][ str(fidx+12) ] = []
+        for sidx in range(1, 7, 1):
+            for fidx in range(1, 13, 1):
+                for s in self.samples[ str(sidx) ][ str(fidx) ]:
+                    self.samples[ str(sidx) ][ str(fidx+12) ].append( librosa.effects.pitch_shift(s, sr=self.constants.sample_rate, n_steps=4) )
+    # end augment_octaves
+    
+    def get_random_sample(self, string, fret, duration_samples=None, duration_secs=None):
+        samples = self.samples[str(string)][str(fret)]
+        idx = np.random.randint( len(samples) )
+        s = samples[idx]
+        # fix duration
+        if duration_samples is None:
+            d = self.constants.secs2samples(duration_secs)
+        else:
+            d = duration_samples
+        s_out = librosa.effects.time_stretch(s, rate=len(s)/d)
+        return s_out
+    # end get_sample
+# end GuitarSamples
 
 class GPAudioPieceEvents:
     def __init__(self, file_path, constants=None):
