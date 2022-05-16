@@ -20,8 +20,7 @@ track_event_files = os.listdir( 'data/dadaGP_event_parts' )
 if not os.path.exists('data/event_tabs'):
     os.makedirs('data/event_tabs')
 
-patterns = []
-patterns_str = []
+patterns = {}
 
 for te_file in track_event_files:
     with open('data/dadaGP_event_parts' + os.sep + te_file, 'rb') as handle:
@@ -32,10 +31,19 @@ for te_file in track_event_files:
                 for te in t:
                     te['tab'] = data_utils.event2fulltab( te )
                     p = data_utils.patternOf2DTab( te['tab'] )
-                    if str(p) not in patterns_str:
-                        patterns.append( p )
-                        patterns_str.append( str(p) )
+                    if str(p) not in patterns.keys():
+                        patterns[ str(p) ] = {
+                            'pattern': p,
+                            'count': 1
+                        }
+                    else:
+                        patterns[ p ]['count'] += 1
     with open('data/event_tabs' + os.sep + te_file, 'wb') as handle:
         pickle.dump(pieces, handle, protocol=pickle.HIGHEST_PROTOCOL)
 with open('data/patterns.pickle', 'wb') as handle:
     pickle.dump(patterns, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+# %%
+# with open('data/patterns.pickle', 'rb') as handle:
+#     patterns = pickle.load(handle)
