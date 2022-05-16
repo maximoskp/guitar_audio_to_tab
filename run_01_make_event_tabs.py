@@ -37,7 +37,7 @@ for te_file in track_event_files:
                             'count': 1
                         }
                     else:
-                        patterns[ p ]['count'] += 1
+                        patterns[ str(p) ]['count'] += 1
     with open('data/event_tabs' + os.sep + te_file, 'wb') as handle:
         pickle.dump(pieces, handle, protocol=pickle.HIGHEST_PROTOCOL)
 with open('data/patterns.pickle', 'wb') as handle:
