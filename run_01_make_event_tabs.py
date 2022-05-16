@@ -14,6 +14,8 @@ else:
 import data_utils
 import os
 
+# %% 
+
 # RUN to save first time
 track_event_files = os.listdir( 'data/dadaGP_event_parts' )
 
@@ -45,5 +47,5 @@ with open('data/patterns.pickle', 'wb') as handle:
 
 
 # %%
-# with open('data/patterns.pickle', 'rb') as handle:
-#     patterns = pickle.load(handle)
+with open('data/patterns.pickle', 'rb') as handle:
+    patterns = pickle.load(handle)

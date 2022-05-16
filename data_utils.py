@@ -236,7 +236,24 @@ class GuitarSamples:
             d = self.constants.secs2samples(duration_secs)
         else:
             d = duration_samples
-        s_out = librosa.effects.time_stretch(s, rate=len(s)/d)
+        # s_out = librosa.effects.time_stretch(s, rate=len(s)/d)
+        pad_length = d - s.size
+        if pad_length <= 0:
+            # print('s.size1: ', s.size)
+            s = s[:pad_length]
+            # print('s.size2: ', s.size)
+            # fade out
+            fade_length = 100
+            while fade_length > s.size:
+                fade_length -= 1
+            s[-fade_length:] = s[-fade_length:]*np.linspace(1,0,fade_length)
+            # print('s.size3: ', s.size)
+        else:
+            # print('s.size4: ', s.size)
+            s = np.pad( s, [0,pad_length] )
+            # print('s.size5: ', s.size)
+        # s_out = librosa.effects.time_stretch(s, rate=len(s)/d)
+        s_out = s
         return s_out
     # end get_sample
 # end GuitarSamples
