@@ -24,6 +24,10 @@ with open('data/y.pickle', 'rb') as handle:
 # %%
 
 rnd_idxs = np.random.permutation( x.shape[0] )
+# make sure noise and empty are first
+rnd_idxs = np.insert(rnd_idxs, 0 , rnd_idxs.size-1)
+rnd_idxs = np.insert(rnd_idxs, 0 , rnd_idxs.size-3)
+
 tr = 100000
 v = 20000
 te = 50000
@@ -51,11 +55,11 @@ latent_size = 6*64
 
 # create the model
 encoder = keras.models.Sequential()
-encoder.add(keras.layers.Conv1D(64, kernel_size=16, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
+encoder.add(keras.layers.Conv1D(64, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
 encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(32, kernel_size=8, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+encoder.add(keras.layers.Conv1D(32, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(16, kernel_size=4, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+encoder.add(keras.layers.Conv1D(16, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 encoder.add(keras.layers.MaxPooling1D(2))
 encoder.add(keras.layers.Conv1D(1, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 encoder.add(keras.layers.Flatten())
@@ -90,8 +94,40 @@ model.summary()
 
 # %%
 
-model.compile(loss='mean_squared_error', optimizer='adam', metrics=['cosine_similarity']) 
+def rounded_accuracy(y_true, y_pred):
+    return keras.metrics.binary_accuracy(tf.round(y_true), tf.round(y_pred))
+
+model.compile(loss='mean_squared_error', optimizer='adam', metrics=['cosine_similarity'])
+# model.compile(loss='binary_crossentropy', optimizer='adam', metrics=[rounded_accuracy])
 
 # %% 
 
-history = model.fit( x_train, y_train, epochs=1000, batch_size=128, validation_data=(x_valid, y_valid)  )
+history = model.fit( x_train, y_train, epochs=1000, batch_size=64, validation_data=(x_valid, y_valid)  )
+
+# %% 
+'''
+import matplotlib.pyplot as plt
+
+# %% 
+
+tmp_rnd_idx = np.random.randint( x_test.shape[0] )
+
+# y_pred = model.predict( x_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
+# y_true = y_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
+y_pred = model.predict( x_train[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
+y_true = y_train[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
+
+fig, ax = plt.subplots(2,1)
+# fig.subplot(3,1,1)
+# plt.bar( np.arange(y_pred.shape[1]) , y_pred[0] )
+ax[0].imshow( y_pred[0,:,:] , cmap='gray_r' )
+ax[0].set_xticklabels([])
+ax[0].set_ylabel('string')
+ax[0].title.set_text('probabilities')
+# _,ax = plt.subplot(3,1,2)
+# plt.bar( np.arange(y_pred.shape[1]) , y_pred[0] )
+ax[1].imshow( y_true[0,:,:,:], cmap='gray_r' )
+ax[1].set_xticklabels([])
+ax[1].set_ylabel('string')
+ax[1].title.set_text('true')
+'''
