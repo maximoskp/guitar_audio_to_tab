@@ -75,8 +75,11 @@ for i in range(top_k):
                 if np.sum(p[string,:]) > 0:
                     fret = np.where( p[string,:] != 0 )[0][0]
                     s += guitar_samples['firebrand'].get_random_sample( string+1, fret, duration_samples=sr )
-            sample = {'audio': s, 'tab': p}
-            dataset.append( sample )
+            ii = 0
+            while ii+samples2keep < s.size:
+                sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
+                dataset.append( sample )
+                ii += samplesstep
     else:
         print('empty tab')
     # add empty tab
