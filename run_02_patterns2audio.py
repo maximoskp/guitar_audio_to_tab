@@ -39,7 +39,10 @@ sr = g.constants.sample_rate
 dataset = []
 
 # keep top_k
-top_k = 500
+top_k = 1000
+# sample duration in samples
+samples2keep = sr//10
+samplesstep = samples2keep//2
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
     p = sorted_patterns[i]['pattern']
@@ -58,8 +61,11 @@ for i in range(top_k):
                     if np.sum(p[string,:]) > 0:
                         fret = np.where( p[string,:] != 0 )[0][0]
                         s += guitar_samples['firebrand'].get_random_sample( 6-string, fret, duration_samples=sr )
-                sample = {'audio': s, 'tab': p}
-                dataset.append( sample )
+                ii = 0
+                while ii+samples2keep < s.size:
+                    sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
+                    dataset.append( sample )
+                    ii += samplesstep
                 p = np.roll( p , [0,1] )
                 highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
             # end while
@@ -80,5 +86,5 @@ for i in range(top_k):
 
 # %% 
 
-with open('data/dataset_audio1sec.pickle', 'wb') as handle:
+with open('data/dataset_audio_patterns_short.pickle', 'wb') as handle:
     pickle.dump(dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
