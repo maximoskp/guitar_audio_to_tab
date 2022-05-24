@@ -100,9 +100,33 @@ def rounded_accuracy(y_true, y_pred):
 model.compile(loss='mean_squared_error', optimizer='adam', metrics=['cosine_similarity'])
 # model.compile(loss='binary_crossentropy', optimizer='adam', metrics=[rounded_accuracy])
 
+# %%
+
+from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger
+
+os.makedirs( 'models', exist_ok=True )
+
+filepath = 'models/tab_full_CNN_out_epoch{epoch:02d}_valLoss{val_loss:.6f}.hdf5'
+checkpoint = ModelCheckpoint(filepath=filepath,
+                            monitor='val_loss',
+                            verbose=1,
+                            save_best_only=True,
+                            mode='min')
+
+filepath_current_best = 'models/tab_full_CNN_out_current_best.hdf5'
+checkpoint_current_best = ModelCheckpoint(filepath=filepath,
+                            monitor='val_loss',
+                            verbose=1,
+                            save_best_only=True,
+                            mode='min')
+
+if os.path.exists('/models/full_tab_logger.csv'):
+    os.remove('/models/full_tab_logger.csv')
+csv_logger = CSVLogger('models/full_tab_logger.csv', append=True, separator=';')
+
 # %% 
 
-history = model.fit( x_train, y_train, epochs=1000, batch_size=64, validation_data=(x_valid, y_valid)  )
+history = model.fit( x_train, y_train, epochs=1000, batch_size=64, validation_data=(x_valid, y_valid) , callbacks=[checkpoint, checkpoint_current_best, csv_logger] )
 
 # %% 
 '''
