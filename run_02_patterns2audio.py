@@ -83,7 +83,10 @@ for i in range(top_k):
     else:
         print('empty tab')
     # add empty tab
-    sample = {'audio':  np.zeros(sr), 'tab': np.zeros( (6,25) )}
+    sample = {'audio':  np.zeros(samples2keep), 'tab': np.zeros( (6,25) )}
+    dataset.append( sample )
+    # add noise
+    sample = {'audio':  np.random.rand(samples2keep), 'tab': np.zeros( (6,25) )}
     dataset.append( sample )
 # end for
 
