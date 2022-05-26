@@ -39,10 +39,11 @@ sr = g.constants.sample_rate
 dataset = []
 
 # keep top_k
-top_k = 1000
+top_k = 3000
 # sample duration in samples
 samples2keep = sr//10
 samplesstep = samples2keep//2
+segments2keep = 3
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
     p = sorted_patterns[i]['pattern']
@@ -62,7 +63,7 @@ for i in range(top_k):
                         fret = np.where( p[string,:] != 0 )[0][0]
                         s += guitar_samples['firebrand'].get_random_sample( 6-string, fret, duration_samples=sr )
                 ii = 0
-                while ii+samples2keep < s.size:
+                while ii<segments2keep and ii+samples2keep < s.size:
                     sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
                     dataset.append( sample )
                     ii += samplesstep
@@ -76,7 +77,7 @@ for i in range(top_k):
                     fret = np.where( p[string,:] != 0 )[0][0]
                     s += guitar_samples['firebrand'].get_random_sample( string+1, fret, duration_samples=sr )
             ii = 0
-            while ii+samples2keep < s.size:
+            while ii<segments2keep and ii+samples2keep < s.size:
                 sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
                 dataset.append( sample )
                 ii += samplesstep

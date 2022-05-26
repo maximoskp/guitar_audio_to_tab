@@ -28,9 +28,9 @@ rnd_idxs = np.random.permutation( x.shape[0] )
 rnd_idxs = np.insert(rnd_idxs, 0 , rnd_idxs.size-1)
 rnd_idxs = np.insert(rnd_idxs, 0 , rnd_idxs.size-3)
 
-tr = 100000
-v = 20000
-te = 50000
+tr = 2*x.shape[0]//3
+v = x.shape[0]//6
+te = x.shape[0]//6
 
 x_train = np.expand_dims( x[ rnd_idxs[:tr] ,:], axis=2 )
 y_train = np.expand_dims( y[ rnd_idxs[:tr] ,:,:], axis=3 )
@@ -56,12 +56,12 @@ latent_size = 6*64
 # create the model
 encoder = keras.models.Sequential()
 encoder.add(keras.layers.Conv1D(64, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
-encoder.add(keras.layers.MaxPooling1D(2))
+# encoder.add(keras.layers.MaxPooling1D(2))
 encoder.add(keras.layers.Conv1D(32, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
-encoder.add(keras.layers.MaxPooling1D(2))
+# encoder.add(keras.layers.MaxPooling1D(2))
 encoder.add(keras.layers.Conv1D(16, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
-encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(1, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# encoder.add(keras.layers.MaxPooling1D(2))
+encoder.add(keras.layers.Conv1D(8, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 encoder.add(keras.layers.Flatten())
 
 latent = keras.models.Sequential([
