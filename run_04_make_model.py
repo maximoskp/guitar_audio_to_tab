@@ -13,7 +13,6 @@ else:
 import data_utils
 import os
 import numpy as np
-import data_utils
 
 with open('data/x.pickle', 'rb') as handle:
     x = pickle.load(handle)
@@ -114,7 +113,7 @@ checkpoint = ModelCheckpoint(filepath=filepath,
                             mode='min')
 
 filepath_current_best = 'models/tab_full_CNN_out_current_best.hdf5'
-checkpoint_current_best = ModelCheckpoint(filepath=filepath,
+checkpoint_current_best = ModelCheckpoint(filepath=filepath_current_best,
                             monitor='val_loss',
                             verbose=1,
                             save_best_only=True,
@@ -126,7 +125,7 @@ csv_logger = CSVLogger('models/full_tab_logger.csv', append=True, separator=';')
 
 # %% 
 
-history = model.fit( x_train, y_train, epochs=1000, batch_size=64, validation_data=(x_valid, y_valid) , callbacks=[checkpoint, checkpoint_current_best, csv_logger] )
+history = model.fit( x_train, y_train, epochs=10000, batch_size=128, validation_data=(x_valid, y_valid) , callbacks=[checkpoint, checkpoint_current_best, csv_logger] )
 
 # %% 
 '''
