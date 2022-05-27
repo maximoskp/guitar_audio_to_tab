@@ -51,8 +51,8 @@ for session in range(10):
 
     # y_pred = model.predict( x_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
     # y_true = y_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
-    y_pred = model.predict( x_train[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
-    y_true = y_train[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
+    y_pred = model.predict( x_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
+    y_true = y_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
 
     fig, ax = plt.subplots(2,1)
     # fig.subplot(3,1,1)
