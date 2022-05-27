@@ -48,7 +48,7 @@ from tensorflow import keras
 # %% 
 
 max_norm_value = 2.0
-input_shape = [1600,1]
+input_shape = [4000,1]
 
 latent_size = 6*64
 

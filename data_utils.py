@@ -136,7 +136,7 @@ def patternOf2DTab(t):
     p = copy.deepcopy(t)
     if np.sum(p) != 0:
         while np.sum(p[:,0]) == 0:
-            p = np.roll( p, -1, axis=1 )
+            p = np.roll( p, [0,-1], axis=1 )
     return p
 # end patternOf2DTab
 

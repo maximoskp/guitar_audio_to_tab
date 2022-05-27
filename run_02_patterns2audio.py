@@ -41,9 +41,9 @@ dataset = []
 # keep top_k
 top_k = 3000
 # sample duration in samples
-samples2keep = sr//10
+samples2keep = sr//4
 samplesstep = samples2keep//2
-segments2keep = 3
+segments2keep = 4
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
     p = sorted_patterns[i]['pattern']
@@ -64,7 +64,10 @@ for i in range(top_k):
                         s += guitar_samples['firebrand'].get_random_sample( 6-string, fret, duration_samples=sr )
                 ii = 0
                 while ii<segments2keep and ii+samples2keep < s.size:
-                    sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
+                    tmp_s = s[ii:ii+samples2keep]
+                    if np.max( np.abs( tmp_s ) ) > 0.05:
+                        tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
+                    sample = {'audio': tmp_s, 'tab': p}
                     dataset.append( sample )
                     ii += samplesstep
                 p = np.roll( p , [0,1] )
@@ -78,7 +81,10 @@ for i in range(top_k):
                     s += guitar_samples['firebrand'].get_random_sample( string+1, fret, duration_samples=sr )
             ii = 0
             while ii<segments2keep and ii+samples2keep < s.size:
-                sample = {'audio': s[ii:ii+samples2keep], 'tab': p}
+                tmp_s = s[ii:ii+samples2keep]
+                if np.max( np.abs( tmp_s ) ) > 0.05:
+                    tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
+                sample = {'audio': tmp_s, 'tab': p}
                 dataset.append( sample )
                 ii += samplesstep
     else:
@@ -86,7 +92,7 @@ for i in range(top_k):
     # add empty tab
     sample = {'audio':  np.zeros(samples2keep), 'tab': np.zeros( (6,25) )}
     dataset.append( sample )
-    # add noise
+    # add noises
     sample = {'audio':  np.random.rand(samples2keep), 'tab': np.zeros( (6,25) )}
     dataset.append( sample )
 # end for
