@@ -39,11 +39,11 @@ sr = g.constants.sample_rate
 dataset = []
 
 # keep top_k
-top_k = 3000
+top_k = 4000
 # sample duration in samples
-samples2keep = sr//4
+samples2keep = sr//10
 samplesstep = samples2keep//2
-segments2keep = 4
+segments2keep = 10
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
     p = sorted_patterns[i]['pattern']
@@ -63,11 +63,12 @@ for i in range(top_k):
                         fret = np.where( p[string,:] != 0 )[0][0]
                         s += guitar_samples['firebrand'].get_random_sample( 6-string, fret, duration_samples=sr )
                 ii = 0
-                while ii<segments2keep and ii+samples2keep < s.size:
+                while ii<samples2keep*segments2keep and ii+samples2keep < s.size:
+                    # print('rollable: ' + str(ii))
                     tmp_s = s[ii:ii+samples2keep]
                     if np.max( np.abs( tmp_s ) ) > 0.05:
                         tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
-                    sample = {'audio': tmp_s, 'tab': p}
+                    sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool)}
                     dataset.append( sample )
                     ii += samplesstep
                 p = np.roll( p , [0,1] )
@@ -80,20 +81,22 @@ for i in range(top_k):
                     fret = np.where( p[string,:] != 0 )[0][0]
                     s += guitar_samples['firebrand'].get_random_sample( string+1, fret, duration_samples=sr )
             ii = 0
-            while ii<segments2keep and ii+samples2keep < s.size:
+            while ii<samples2keep*segments2keep and ii+samples2keep < s.size:
+                # print('non-rollable: ' + str(ii))
                 tmp_s = s[ii:ii+samples2keep]
                 if np.max( np.abs( tmp_s ) ) > 0.05:
                     tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
-                sample = {'audio': tmp_s, 'tab': p}
+                sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool)}
                 dataset.append( sample )
                 ii += samplesstep
     else:
         print('empty tab')
     # add empty tab
-    sample = {'audio':  np.zeros(samples2keep), 'tab': np.zeros( (6,25) )}
+    # print('empty-random')
+    sample = {'audio':  np.zeros(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool)}
     dataset.append( sample )
     # add noises
-    sample = {'audio':  np.random.rand(samples2keep), 'tab': np.zeros( (6,25) )}
+    sample = {'audio':  np.random.rand(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool)}
     dataset.append( sample )
 # end for
 

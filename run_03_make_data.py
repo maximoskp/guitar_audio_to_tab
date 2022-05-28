@@ -20,14 +20,14 @@ with open('data/dataset_audio_patterns_short.pickle', 'rb') as handle:
 
 # %% XY matrices
 
-x = np.zeros( ( len( patterns ) , len( patterns[0]['audio'] ) ) )
-y = np.zeros( ( len( patterns ) , patterns[0]['tab'].shape[0] , patterns[0]['tab'].shape[1] ) )
+x = np.zeros( ( len( patterns ) , len( patterns[0]['audio'] ) ) ).astype(np.float32)
+y = np.zeros( ( len( patterns ) , patterns[0]['tab'].shape[0] , patterns[0]['tab'].shape[1] ) ).astype(np.bool)
 
 for i, p in enumerate( patterns ):
     if i%1000 == 0:
         print(str(i) + ' / ' + str(len(patterns)))
-    x[i,:] = p['audio']
-    y[i,:,:] = p['tab']
+    x[i,:] = p['audio'].astype(np.float32)
+    y[i,:,:] = p['tab'].astype(np.bool)
 
 # %% 
 

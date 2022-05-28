@@ -48,19 +48,20 @@ from tensorflow import keras
 # %% 
 
 max_norm_value = 2.0
-input_shape = [4000,1]
+input_shape = [x_train[0].size,1]
 
 latent_size = 6*64
 
 # create the model
 encoder = keras.models.Sequential()
-encoder.add(keras.layers.Conv1D(64, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
+encoder.add(keras.layers.Conv1D(256, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
+# encoder.add(keras.layers.MaxPooling1D(2))
+encoder.add(keras.layers.Conv1D(128, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# encoder.add(keras.layers.MaxPooling1D(2))
+encoder.add(keras.layers.Conv1D(64, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 # encoder.add(keras.layers.MaxPooling1D(2))
 encoder.add(keras.layers.Conv1D(32, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
-# encoder.add(keras.layers.MaxPooling1D(2))
 encoder.add(keras.layers.Conv1D(16, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
-# encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(8, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
 encoder.add(keras.layers.Flatten())
 
 latent = keras.models.Sequential([
@@ -98,6 +99,7 @@ def rounded_accuracy(y_true, y_pred):
 
 model.compile(loss='mean_squared_error', optimizer='adam', metrics=['cosine_similarity'])
 # model.compile(loss='binary_crossentropy', optimizer='adam', metrics=[rounded_accuracy])
+# model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['cosine_similarity'])
 
 # %%
 
