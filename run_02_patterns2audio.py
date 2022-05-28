@@ -39,11 +39,11 @@ sr = g.constants.sample_rate
 dataset = []
 
 # keep top_k
-top_k = 4000
+top_k = 2000
 # sample duration in samples
 samples2keep = sr//10
 samplesstep = samples2keep//2
-segments2keep = 10
+segments2keep = 5
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
     p = sorted_patterns[i]['pattern']

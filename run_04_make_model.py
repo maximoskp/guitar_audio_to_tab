@@ -20,6 +20,10 @@ with open('data/x.pickle', 'rb') as handle:
 with open('data/y.pickle', 'rb') as handle:
     y = pickle.load(handle)
 
+idxs = np.random.permutation( x.shape[0] )
+x = x[idxs,:]
+y = y[idxs,:,:]
+
 # %%
 
 rnd_idxs = np.random.permutation( x.shape[0] )
@@ -50,22 +54,46 @@ from tensorflow import keras
 max_norm_value = 2.0
 input_shape = [x_train[0].size,1]
 
-latent_size = 6*64
+latent_size = 6*32
+
+# # create the model
+# encoder = keras.models.Sequential()
+# encoder.add(keras.layers.Conv1D(128, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
+# # encoder.add(keras.layers.MaxPooling1D(2))
+# encoder.add(keras.layers.Conv1D(164, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# # encoder.add(keras.layers.MaxPooling1D(2))
+# encoder.add(keras.layers.Conv1D(32, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# # encoder.add(keras.layers.MaxPooling1D(2))
+# encoder.add(keras.layers.Conv1D(16, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# encoder.add(keras.layers.Conv1D(8, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+# encoder.add(keras.layers.Flatten())
 
 # create the model
 encoder = keras.models.Sequential()
-encoder.add(keras.layers.Conv1D(256, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform', input_shape=input_shape))
+encoder.add(keras.layers.Conv1D(64, kernel_size=16, activation='relu',input_shape=input_shape))
 # encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(128, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+encoder.add(keras.layers.Dropout(0.3))
+encoder.add(keras.layers.BatchNormalization())
+encoder.add(keras.layers.Conv1D(32, kernel_size=8, activation='relu'))
+encoder.add(keras.layers.Dropout(0.3))
+encoder.add(keras.layers.BatchNormalization())
 # encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(64, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+encoder.add(keras.layers.Conv1D(16, kernel_size=4, activation='relu'))
+encoder.add(keras.layers.Dropout(0.3))
+encoder.add(keras.layers.BatchNormalization())
 # encoder.add(keras.layers.MaxPooling1D(2))
-encoder.add(keras.layers.Conv1D(32, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
-encoder.add(keras.layers.Conv1D(16, kernel_size=3, kernel_constraint=keras.constraints.max_norm(max_norm_value), activation='relu', kernel_initializer='he_uniform'))
+encoder.add(keras.layers.Conv1D(8, kernel_size=3, activation='relu'))
+encoder.add(keras.layers.Conv1D(4, kernel_size=3, activation='relu'))
 encoder.add(keras.layers.Flatten())
 
 latent = keras.models.Sequential([
-    keras.layers.Dense(latent_size),
+    keras.layers.Dense(latent_size, activation='relu'),
+    keras.layers.Dropout(0.3),
+    keras.layers.BatchNormalization(),
+    keras.layers.Dense(latent_size, activation='relu'),
+    keras.layers.Dropout(0.3),
+    keras.layers.BatchNormalization(),
+    keras.layers.Dense(latent_size, activation='relu'),
     keras.layers.Reshape( (1,6,latent_size//6) )
 ])
 
