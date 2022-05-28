@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import sleep
 from threading import Thread
+import copy
 
 # load model
 model = keras.models.load_model( 'models/tab_full_CNN_out_current_best.hdf5' )
@@ -101,10 +102,13 @@ threaded_input.start()
 
 # after starting, check when n empties (file ends) and stop
 while output1.is_active() and not user_terminated:
-    y_pred = model.predict( np.reshape( global_block[:1600], (1,1600,1) ) )
+    bb = copy.deepcopy( global_block[:1600] )
+    if np.max( np.abs( bb ) ) > 0.05:
+        bb = bb/np.max( np.abs( bb ) )
+    y_pred = model.predict( np.reshape( bb, (1,1600,1) ) )
     plt.clf()
     plt.subplot(2,1,1)
-    plt.plot( global_block[:1600] )
+    plt.plot( bb )
     plt.ylim([-1,1])
     plt.xticks([])
     plt.title('input')
