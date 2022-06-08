@@ -56,6 +56,8 @@ for i in range(top_k):
             rollable = False
         if rollable:
             highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
+            hand = np.zeros(25)
+            hand[highest_fret] = 1
             while highest_fret < 24:
                 s = np.zeros(sr)
                 for string in range(6):
@@ -68,13 +70,18 @@ for i in range(top_k):
                     tmp_s = s[ii:ii+samples2keep]
                     if np.max( np.abs( tmp_s ) ) > 0.05:
                         tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
-                    sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool)}
+                    sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool), 'hand': hand.astype(np.bool)}
                     dataset.append( sample )
                     ii += samplesstep
                 p = np.roll( p , [0,1] )
                 highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
+                hand = np.zeros(25)
+                hand[highest_fret] = 1
             # end while
         else:
+            highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
+            hand = np.zeros(25)
+            hand[highest_fret] = 1
             s = np.zeros(sr)
             for string in range(6):
                 if np.sum(p[string,:]) > 0:
@@ -86,17 +93,17 @@ for i in range(top_k):
                 tmp_s = s[ii:ii+samples2keep]
                 if np.max( np.abs( tmp_s ) ) > 0.05:
                     tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
-                sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool)}
+                sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool), 'hand': hand.astype(np.bool)}
                 dataset.append( sample )
                 ii += samplesstep
     else:
         print('empty tab')
     # add empty tab
     # print('empty-random')
-    sample = {'audio':  np.zeros(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool)}
+    sample = {'audio':  np.zeros(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool), 'hand': np.zeros(25).astype(np.bool)}
     dataset.append( sample )
     # add noises
-    sample = {'audio':  np.random.rand(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool)}
+    sample = {'audio':  np.random.rand(samples2keep).astype(np.float32), 'tab': np.zeros( (6,25) ).astype(np.bool), 'hand': np.zeros(25).astype(np.bool)}
     dataset.append( sample )
 # end for
 
