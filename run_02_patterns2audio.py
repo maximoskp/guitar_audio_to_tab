@@ -109,5 +109,5 @@ for i in range(top_k):
 
 # %% 
 
-with open('data/dataset_audio_patterns_short.pickle', 'wb') as handle:
+with open('data/dataset_audio_patterns_hand.pickle', 'wb') as handle:
     pickle.dump(dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
