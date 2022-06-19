@@ -65,7 +65,6 @@ cov = np.cov(mh.reshape(-1), mv.reshape(-1))  # 2x2
 #Modified by Augmented Startups 2021
 #Pose-Estimation in 5 Minutes
 #Watch 5 Minute Tutorial at www.augmentedstartups.info/YouTube
-
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 import time
@@ -76,8 +75,7 @@ import time
 cap = cv2.VideoCapture(-1)
 
 
-final_pb, final_pn = None, None
-
+# final_pb, final_pn = None, None
 while cap.isOpened():
   success, image = cap.read()
   if not success:
