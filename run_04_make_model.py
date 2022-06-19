@@ -106,7 +106,7 @@ hand_dense = keras.layers.Dense(128, activation='relu')(hand_dense)
 hand_dense = keras.models.Model( inputs=input_hand, outputs=hand_dense )
 
 # combine inputs
-combined = keras.layers.concatenate([ audio_encoder.outputs[0], hand_dense.outputs[0] ])
+combined = keras.layers.concatenate([ audio_encoder.outputs[0], hand_dense.outputs[0] ], axis=-1)
 
 latent = keras.layers.Dense(latent_size, activation='relu')(combined)
 latent = keras.layers.Dropout(0.3)(latent)
@@ -116,10 +116,9 @@ latent = keras.layers.Dropout(0.3)(latent)
 latent = keras.layers.BatchNormalization()(latent)
 latent = keras.layers.Dense(latent_size, activation='relu')(latent)
 latent = keras.layers.Reshape( (1,6,latent_size//6) )(latent)
-latent = keras.models.Model( inputs=combined, outputs=latent )
+# latent = keras.models.Model( inputs=[audio_encoder.input, hand_dense.input], outputs=latent )
 
-decoder = keras.layers.Conv2DTranspose(latent_size//6, kernel_size=3, strides=2, padding='valid',
-                                 activation='selu', input_shape=[1,6,latent_size//6])(latent)
+decoder = keras.layers.Conv2DTranspose(latent_size//6, kernel_size=3, strides=2, padding='valid', activation='selu', input_shape=[1,6,latent_size//6])(latent)
 decoder = keras.layers.Conv2DTranspose(1, kernel_size=3, strides=2, padding='same', activation='selu')(decoder)
 decoder = keras.layers.Lambda(lambda x: x[:,:,:-1,:])(decoder)
 decoder = keras.layers.Reshape([6, 25])(decoder)
@@ -138,8 +137,8 @@ out_layer = keras.models.Sequential([
 
 audio_encoder.summary()
 hand_dense.summary()
-latent.summary()
-decoder.summary()
+# latent.summary()
+# decoder.summary()
 model.summary()
 
 # %%
