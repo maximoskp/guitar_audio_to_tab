@@ -1,5 +1,9 @@
 # https://medium.com/augmented-startups/hand-tracking-30-fps-on-cpu-in-5-minutes-986a749709d7
 
+# pip install opencv-python
+# pip install mediapipe
+# pip install protobuf==3.20.*
+
 import cv2
 import mediapipe as mp
 import scipy.io
@@ -15,7 +19,7 @@ def get_markers(I, mu, cov):
           :-3:-1]  # keep last two items, reversed (check: https://stackoverflow.com/questions/509211/understanding-slice-notation)
   Ipr = multivariate_normal.pdf(ICbCr, mu, cov)  # skin probability image
   Ipr = Ipr / np.max(Ipr)  # Normalize to [0,1]
-  _, Ithr = cv2.threshold(Ipr, 0.01, 1, cv2.THRESH_BINARY)  # threshold probability image
+  _, Ithr = cv2.threshold(Ipr, 0.003, 1, cv2.THRESH_BINARY)  # threshold probability image
 
   # Minkowski Opening
   kernO = np.ones((5, 5))  # Create small morphological kernel for opening
@@ -35,10 +39,10 @@ def get_markers(I, mu, cov):
 
   try:
     body_marker = np.where(I_labeled == 1)
-    xb, yb = int(np.mean(body_marker[0])), int(np.mean(body_marker[1]))
+    xb, yb = int(np.mean(body_marker[0]))/I_labeled.shape[1], int(np.mean(body_marker[1]))/I_labeled.shape[1]
 
     nut_marker = np.where(I_labeled == 2)
-    xn, yn = int(np.mean(nut_marker[0])), int(np.mean(nut_marker[1]))
+    xn, yn = int(np.mean(nut_marker[0]))/I_labeled.shape[1], int(np.mean(nut_marker[1]))/I_labeled.shape[1]
 
     return Icls, np.array([xb, 1-yb]), np.array([xn, 1-yn])
   except ValueError as e:
@@ -83,8 +87,8 @@ while cap.isOpened():
 
   I_out, pb, pn = get_markers(image, mu, cov)
 
-  if pb and pn:
-    final_pb, final_pn = pb, pn
+#   if pb and pn:
+#     final_pb, final_pn = pb, pn
 
   I_out = I_out * 255
   I_out = I_out[:, ::-1]
@@ -103,7 +107,7 @@ while cap.isOpened():
 #cap = cv2.VideoCapture("hands.mp4")
 # pb = np.array([0.8, 0.3])
 # pn = np.array([0.1, 0.5])
-# print("pb, pn", pb, pn)
+print("pb, pn", pb, pn)
 prevTime = 0
 with mp_hands.Hands(
     min_detection_confidence=0.5,       #Detection Sensitivity
