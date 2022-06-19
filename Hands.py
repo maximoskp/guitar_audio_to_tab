@@ -51,13 +51,6 @@ Mrk = cv2.cvtColor(Mrk, cv2.COLOR_BGR2RGB)
 # Get Cr and Cb matrices (i.e. projections each pixel 3D-vector to Cb and Cr axes)
 mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
 mh, ms, mv = cv2.split(mrk_hsv)
-# Mrk = cv2.cvtColor(Mrk, cv2.COLOR_RGB2YCR_CB)  # (Y, Cr, Cb) standard cv2 conversion from RGB
-# Cr = Mrk[:, :, 1]
-# Cb = Mrk[:, :, 2]
-
-# # Learn Parameters to model skin color in (Cb,Cr) plane
-# mu = (np.mean(Cb), np.mean(Cr))  # 2x1
-# cov = np.cov(Cb.reshape(-1), Cr.reshape(-1))  # 2x2
 
 mu = (np.mean(mh), np.mean(ms))  # 2x1
 cov = np.cov(mh.reshape(-1), mv.reshape(-1))  # 2x2
@@ -81,37 +74,36 @@ cap = cv2.VideoCapture(-1)
 
 final_pb, final_pn = None, None
 
-# while cap.isOpened():
-#   success, image = cap.read()
-#   if not success:
-#     print("Ignoring empty camera frame.")
-#     # If loading a video, use 'break' instead of 'continue'.
-#     continue
+while cap.isOpened():
+  success, image = cap.read()
+  if not success:
+    print("Ignoring empty camera frame.")
+    # If loading a video, use 'break' instead of 'continue'.
+    continue
 
-#   # I_lbl = get_markers(image, mu, cov)
-#   I_out, pb, pn = get_markers(image, mu, cov)
+  I_out, pb, pn = get_markers(image, mu, cov)
 
-#   if pb and pn:
-#     final_pb, final_pn = pb, pn
+  if pb and pn:
+    final_pb, final_pn = pb, pn
 
-#   I_out = I_out * 255
-#   I_out = I_out[:, ::-1]
+  I_out = I_out * 255
+  I_out = I_out[:, ::-1]
 
-#   image = cv2.flip(image, 1)
+  image = cv2.flip(image, 1)
 
-#   image[:, :, 0] = np.maximum(image[:, :, 0], I_out)
-#   image[:, :, 1] = np.maximum(image[:, :, 1], I_out)
-#   image[:, :, 2] = np.maximum(image[:, :, 2], I_out)
-#   cv2.imshow('MediaPipe Hands', image)
+  image[:, :, 0] = np.maximum(image[:, :, 0], I_out)
+  image[:, :, 1] = np.maximum(image[:, :, 1], I_out)
+  image[:, :, 2] = np.maximum(image[:, :, 2], I_out)
+  cv2.imshow('MediaPipe Hands', image)
 
-#   if cv2.waitKey(5) & 0xFF == 27:
-#     break
+  if cv2.waitKey(5) & 0xFF == 27:
+    break
 
 ##For Video
 #cap = cv2.VideoCapture("hands.mp4")
-pb = np.array([0.8, 0.3])
-pn = np.array([0.1, 0.5])
-print("pb, pn", pb, pn)
+# pb = np.array([0.8, 0.3])
+# pn = np.array([0.1, 0.5])
+# print("pb, pn", pb, pn)
 prevTime = 0
 with mp_hands.Hands(
     min_detection_confidence=0.5,       #Detection Sensitivity
@@ -153,11 +145,7 @@ with mp_hands.Hands(
         pinky_tip_y = results.multi_hand_landmarks[0].landmark[-1].y
 
         pinky_tip = np.array([pinky_tip_x, 1-pinky_tip_y])
-        # print(pinky_tip)
-        # nut_dist  = np.linalg.norm(pn - pinky_tip)
-        # body_dist = np.linalg.norm(pinky_tip - pb)
-        # print(pinky_tip-pn)
-        # print(body_dist)
+
 
         neck_vector = (pb - pn)
         pinky_prjection_to_neck =  (np.dot(neck_vector, pinky_tip) / np.linalg.norm(neck_vector)) * neck_vector /  np.linalg.norm(neck_vector)
@@ -174,12 +162,9 @@ with mp_hands.Hands(
     prevTime = currTime
     cv2.putText(image, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
-    # image = (image[:,:, 2] + I_lbl*125)/2
-    # print(image)
-
-    # image[:,:,0] = np.maximum(image[:,:,0], I_out)
-    # image[:, :, 1] = np.maximum(image[:, :, 1], I_out)
-    # image[:, :, 2] = np.maximum(image[:, :, 2], I_out)
+    image[:,:,0] = np.maximum(image[:,:,0], I_out)
+    image[:, :, 1] = np.maximum(image[:, :, 1], I_out)
+    image[:, :, 2] = np.maximum(image[:, :, 2], I_out)
     cv2.imshow('MediaPipe Hands', image )
     if cv2.waitKey(5) & 0xFF == 27:
       break
