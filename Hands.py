@@ -13,18 +13,24 @@ import numpy as np
 import time
 
 def get_markers(I, mu, cov):
+  global cov_init
   I = cv2.cvtColor(I, cv2.COLOR_BGR2RGB)
-  # IYCrCb = cv2.cvtColor(I, cv2.COLOR_RGB2YCR_CB)  # (Y, Cr, Cb) standard cv2 conversion from RGB
+  IYCrCb = cv2.cvtColor(I, cv2.COLOR_RGB2YCR_CB)  # (Y, Cr, Cb) standard cv2 conversion from RGB
   Ihsv = cv2.cvtColor(I, cv2.COLOR_RGB2HSV)  # (H, S, V) standard cv2 conversion from RGB
   # ICbCr = IYCrCb[:, :,:-3:-1]  # keep last two items, reversed (check: https://stackoverflow.com/questions/509211/understanding-slice-notation)
-  Ihsv = Ihsv[:, :, 0:3:2]  # keep first two items
+  # Ihsv = Ihsv[:, :, 0:3:2]  # keep first an last items
+  Ihs = Ihsv[:, :, :2]  # keep first two items
   # Ipr = multivariate_normal.pdf(ICbCr, mu, cov)  # marker probability image
-  Ipr = multivariate_normal.pdf(Ihsv, mu, cov)  # skin probability image
+  try: 
+    Ipr = multivariate_normal.pdf(Ihs, mu, cov)  # skin probability image
+  except ValueError as e:
+    Ipr = multivariate_normal.pdf(Ihs, mu, cov_init)  # skin probability image
+    print(e)
   Ipr = Ipr / np.max(Ipr)  # Normalize to [0,1]
-  _, Ithr = cv2.threshold(Ipr, 0.3, 1, cv2.THRESH_BINARY)  # threshold probability image
+  _, Ithr = cv2.threshold(Ipr, 0.01, 1, cv2.THRESH_BINARY)  # threshold probability image
 
   # Minkowski Opening
-  kernO = np.ones((5, 5))  # Create small morphological kernel for opening
+  kernO = np.ones((7, 7))  # Create small morphological kernel for opening
   Iopn = cv2.morphologyEx(Ithr, cv2.MORPH_OPEN, kernO)
 
   # Minkowski Closing
@@ -36,8 +42,8 @@ def get_markers(I, mu, cov):
 
   # TODO: maybe need to keep top2 classes with regard to area
 
-  if nb_labels<2 or nb_labels>4:
-    return Icls, None, None
+  # if nb_labels<2 or nb_labels>4:
+  #   return Icls, None, None
 
   try:
     body_marker = np.where(I_labeled == 1)
@@ -47,10 +53,38 @@ def get_markers(I, mu, cov):
     xn, yn = int(np.mean(nut_marker[1]))/I_labeled.shape[1], int(np.mean(nut_marker[0]))/I_labeled.shape[0]
 
     return Icls, np.array([xb, 1-yb]), np.array([xn, 1-yn])
+    # return Ithr, np.array([xb, 1-yb]), np.array([xn, 1-yn])
   except ValueError as e:
     return Icls, None, None
+    # return Ithr, None, None
 
 
+def onTrack1(val):
+    global mu
+    print(mu[0], val)
+    mu[0]=val
+    print('Mu Hue',mu[0])
+def onTrack2(val):
+    global mu
+    mu[1]=val
+    print('Mu Sat',mu[1])
+def onTrack3(val):
+    global cov
+    print(type(cov), cov.shape, cov[0,0], val)
+    cov[0,0]=val
+    print('Hue-Hue',cov[0,0])
+def onTrack4(val):
+    global cov
+    cov[0,1]=val
+    print('Hue-Sat',cov[0,1])
+def onTrack5(val):
+    global cov
+    cov[1,0]=val
+    print('Sat-Hue',cov[1,0])
+def onTrack6(val):
+    global cov
+    cov[1,1]=val
+    print('Val High',cov)
 
 
 if __name__ == "__main__":
@@ -59,11 +93,23 @@ if __name__ == "__main__":
 
   # Get Cr and Cb matrices (i.e. projections each pixel 3D-vector to Cb and Cr axes)
   mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
-  mh, _, ms = cv2.split(mrk_hsv)
+  mh, ms, mv = cv2.split(mrk_hsv)
 
-  mu = (np.mean(mh), np.mean(ms))  # 2x1
-  cov = np.cov(mh.reshape(-1), ms.reshape(-1))  # 2x2
-  # print(mu, cov)
+  mu = [np.mean(mh), np.mean(ms)]  # 2x1
+  cov = np.array(np.cov(mh.reshape(-1), ms.reshape(-1)))  # 2x2
+  cov_init = np.copy(cov)
+  print(mu, cov)
+
+  Sk = cv2.imread('marker_samples3.png')
+
+  # Get Cr and Cb matrices (i.e. projections each pixel 3D-vector to Cb and Cr axes)
+  Sk=cv2.cvtColor(Sk, cv2.COLOR_RGB2YCR_CB) # (Y, Cr, Cb) standard cv2 conversion from RGB
+  Cr = Sk[:,:,1]
+  Cb = Sk[:,:,2]
+
+  # # Learn Parameters to model skin color in (Cb,Cr) plane
+  # mu = (np.mean(Cb), np.mean(Cr)) # 2x1
+  # cov = np.cov(Cb.reshape(-1), Cr.reshape(-1)) # 2x2
 
 
   #Created by MediaPipe
@@ -74,13 +120,24 @@ if __name__ == "__main__":
   mp_hands = mp.solutions.hands
 
 
+  cv2.namedWindow('myTracker')
+  # cv2.moveWindow('myTracker',width,0)
+  
+  
+  cv2.createTrackbar('Mu Hue','myTracker',int(mu[0]),179,onTrack1)
+  cv2.createTrackbar('Mu Sat','myTracker',int(mu[1]),255,onTrack2)
+  cv2.createTrackbar('Cov Hue-Hue','myTracker',int(cov[0,0]),1000,onTrack3)
+  # cv2.createTrackbar('Cov Hue-Sat','myTracker',int(cov[0,1]),-1000,onTrack4)
+  # cv2.createTrackbar('Cov Sat-Hue','myTracker',int(cov[1,0]),-1000,onTrack5)
+  cv2.createTrackbar('Cov Sat-Sat','myTracker',int(cov[1,1]),1000,onTrack6)
+
 
   ## For webcam input:
   # cap = cv2.VideoCapture(0)
   cap = cv2.VideoCapture(-1)
 
 
-  # final_pb, final_pn = None, None
+  final_pb, final_pn = None, None
   while cap.isOpened():
     success, image = cap.read()
     if not success:
@@ -90,8 +147,9 @@ if __name__ == "__main__":
 
     I_out, pb, pn = get_markers(image, mu, cov)
 
-  #   if pb and pn:
-  #     final_pb, final_pn = pb, pn
+    if pb is not None and pn is not None:
+      # if np.linal
+      final_pb, final_pn = pb, pn
 
     I_out = I_out * 255
     I_out = I_out[:, ::-1]
@@ -102,6 +160,7 @@ if __name__ == "__main__":
     image[:, :, 1] = np.maximum(image[:, :, 1], I_out)
     image[:, :, 2] = np.maximum(image[:, :, 2], I_out)
     cv2.imshow('MediaPipe Hands', image)
+    # cv2.imshow('MediaPipe Hands', I_out)
 
     if cv2.waitKey(5) & 0xFF == 27:
       break
@@ -110,6 +169,8 @@ if __name__ == "__main__":
   #cap = cv2.VideoCapture("hands.mp4")
   # pb = np.array([0.8, 0.3])
   # pn = np.array([0.1, 0.5])
+  pb, pn = final_pb, final_pn
+  valid_pb, valid_pn = None, None
   print("pb, pn", pb, pn)
   prevTime = 0
   with mp_hands.Hands(
@@ -122,6 +183,11 @@ if __name__ == "__main__":
         # If loading a video, use 'break' instead of 'continue'.
         continue
 
+
+      I_out, pb, pn = get_markers(image, mu, cov)
+      if pb is not None and pn is not None:
+        # if np.linal
+        valid_pb, valid_pn = pb, pn
 
       ##(2) convert to hsv-space, then split the channels
       hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
