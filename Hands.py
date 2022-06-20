@@ -17,11 +17,11 @@ def get_markers(I, mu, cov):
   # IYCrCb = cv2.cvtColor(I, cv2.COLOR_RGB2YCR_CB)  # (Y, Cr, Cb) standard cv2 conversion from RGB
   Ihsv = cv2.cvtColor(I, cv2.COLOR_RGB2HSV)  # (H, S, V) standard cv2 conversion from RGB
   # ICbCr = IYCrCb[:, :,:-3:-1]  # keep last two items, reversed (check: https://stackoverflow.com/questions/509211/understanding-slice-notation)
-  Ihsv = Ihsv[:, :, :2]  # keep first two items
+  Ihsv = Ihsv[:, :, 0:3:2]  # keep first two items
   # Ipr = multivariate_normal.pdf(ICbCr, mu, cov)  # marker probability image
   Ipr = multivariate_normal.pdf(Ihsv, mu, cov)  # skin probability image
   Ipr = Ipr / np.max(Ipr)  # Normalize to [0,1]
-  _, Ithr = cv2.threshold(Ipr, 0.05, 1, cv2.THRESH_BINARY)  # threshold probability image
+  _, Ithr = cv2.threshold(Ipr, 0.3, 1, cv2.THRESH_BINARY)  # threshold probability image
 
   # Minkowski Opening
   kernO = np.ones((5, 5))  # Create small morphological kernel for opening
@@ -54,12 +54,12 @@ def get_markers(I, mu, cov):
 
 
 if __name__ == "__main__":
-  Mrk = cv2.imread('marker_samples3.png')
+  Mrk = cv2.imread('marker_samples4.png')
   # Mrk = cv2.cvtColor(Mrk, cv2.COLOR_BGR2RGB)
 
   # Get Cr and Cb matrices (i.e. projections each pixel 3D-vector to Cb and Cr axes)
   mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
-  mh, ms, mv = cv2.split(mrk_hsv)
+  mh, _, ms = cv2.split(mrk_hsv)
 
   mu = (np.mean(mh), np.mean(ms))  # 2x1
   cov = np.cov(mh.reshape(-1), ms.reshape(-1))  # 2x2
