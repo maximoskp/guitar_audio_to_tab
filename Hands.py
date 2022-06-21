@@ -172,6 +172,7 @@ if __name__ == "__main__":
   print("pb, pn", pb, pn)
   prevTime = 0
   prev_rel_dist_from_nut = 0
+  pinky_tip_x, pinky_tip_y = None, None
   with mp_hands.Hands(
       min_detection_confidence=0.5,       #Detection Sensitivity
       min_tracking_confidence=0.5) as hands:
@@ -208,19 +209,30 @@ if __name__ == "__main__":
       # Draw the hand annotations on the image.
       image.flags.writeable = True
       image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+      pinky_prjection_to_neck=None
       if results.multi_hand_landmarks:
+        if results.multi_handedness[0].classification[0].label=='Left':
           pinky_tip_x = results.multi_hand_landmarks[0].landmark[-1].x
           pinky_tip_y = results.multi_hand_landmarks[0].landmark[-1].y
+        elif results.multi_handedness[-1].classification[0].label=='Left':
+          pinky_tip_x = results.multi_hand_landmarks[-1].landmark[-1].x
+          pinky_tip_y = results.multi_hand_landmarks[-1].landmark[-1].y
+        # else:
+        #   print('[gb] No left hand found!')
+        #   continue``
+    
+        if pinky_tip_x is not None and pinky_tip_y is not None:
           pinky_tip = np.array([pinky_tip_x, 1-pinky_tip_y])
-
           neck_vector = (valid_pb - valid_pn)
-          pinky_prjection_to_neck =  (np.dot(neck_vector, pinky_tip) / np.linalg.norm(neck_vector)) * neck_vector /  np.linalg.norm(neck_vector)
-          rel_dist_from_nut = np.linalg.norm(pinky_prjection_to_neck) / np.linalg.norm(neck_vector)
+          # pinky_prjection_to_neck =  (np.dot(neck_vector, pinky_tip) / np.linalg.norm(neck_vector)) * neck_vector /  np.linalg.norm(neck_vector)
+          # rel_dist_from_nut = np.linalg.norm(pinky_prjection_to_neck) / np.linalg.norm(neck_vector)
           
+          rel_dist_from_nut = np.linalg.norm(pinky_tip-valid_pn)/np.linalg.norm(neck_vector)
+
           # print(rel_dist_from_nut)
           if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
-            # cv2.putText(image, f'Pinky Position: {round(rel_dist_from_nut,2)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
             prev_rel_dist_from_nut = rel_dist_from_nut
+            # print('AAAAAAAAAA')
 
           for hand_landmarks in results.multi_hand_landmarks:
               mp_drawing.draw_landmarks(
@@ -237,6 +249,8 @@ if __name__ == "__main__":
       image[:, :, 2] = np.maximum(image[:, :, 2], valid_Iout)
       image = cv2.circle(image, (int(valid_pb[0]*width), int((1-valid_pb[1])*height)), 5, (255, 0, 0), 2)
       image = cv2.circle(image, (int(valid_pn[0]*width), int((1-valid_pn[1])*height)), 5, (255, 0, 0), 2)
+      if pinky_prjection_to_neck is not None:
+        image = cv2.circle(image, (int(pinky_prjection_to_neck[0]*width), int((1-pinky_prjection_to_neck[1])*height)), 5, (255, 0, 0), 2)
       cv2.imshow('MediaPipe Hands', image )
       if cv2.waitKey(5) & 0xFF == 27:
         break
