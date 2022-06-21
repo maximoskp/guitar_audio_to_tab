@@ -1,12 +1,7 @@
 # https://medium.com/augmented-startups/hand-tracking-30-fps-on-cpu-in-5-minutes-986a749709d7
 
-# conda create --name python=3.8
-# pip install opencv-python
-# pip install mediapipe
-# pip install protobuf==3.20.*
-# pip install matplotlib
-# pip install scipy
-# pip install numpy
+# conda create --name cv python=3.8
+# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy
 
 import cv2
 import mediapipe as mp
@@ -41,7 +36,7 @@ def get_markers(I, mu, cov, threshold=None):
   kernC = np.ones((25, 25))  # Create large morphological kernel for closing
   Icls = cv2.morphologyEx(Iopn, cv2.MORPH_CLOSE, kernC)
 
-    # Automatic labeling (by neighbour)
+  # Automatic labeling (by neighbour)
   I_labeled, nb_labels = scipy.ndimage.label(Icls)
 
   # TODO: maybe need to keep top2 classes with regard to area
@@ -56,42 +51,36 @@ def get_markers(I, mu, cov, threshold=None):
     nut_marker = np.where(I_labeled == 2)
     xn, yn = int(np.mean(nut_marker[1]))/I_labeled.shape[1], int(np.mean(nut_marker[0]))/I_labeled.shape[0]
 
-    if xb > xn:
+    if xb > xn: # choose body-point as the right area always (for right-hand people)
       return Ipr, Icls, np.array([1-xn, 1-yn]), np.array([1-xb, 1-yb])
     else:  
       return Ipr, Icls, np.array([1-xb, 1-yb]), np.array([1-xn, 1-yn])
-    # return Ithr, np.array([xb, 1-yb]), np.array([xn, 1-yn])
   except ValueError as e:
     return Ipr, Icls, None, None
-    # return Ithr, None, None
 
 
 def onTrack1(val):
     global mu
     print(mu[0], val)
     mu[0]=val
-    print('Mu Hue',mu[0])
+    # print('Mu Hue',mu[0])
 def onTrack2(val):
     global mu
     mu[1]=val
-    print('Mu Sat',mu[1])
+    # print('Mu Sat',mu[1])
 def onTrack3(val):
     global cov
-    print(type(cov), cov.shape, cov[0,0], val)
+    # print(type(cov), cov.shape, cov[0,0], val)
     cov[0,0]=val
-    print('Hue-Hue',cov[0,0])
+    # print('Hue-Hue',cov[0,0])
 def onTrack4(val):
     global cov
     cov[0,1]=val
-    print('Hue-Sat',cov[0,1])
+    # print('Hue-Sat',cov[0,1])
 def onTrack5(val):
     global threshold
     threshold=val
-    print('Threshold',threshold)  
-# def onTrack6(val):
-#     global cov
-#     cov[1,1]=val
-#     print('Val High',cov)
+
 
 
 if __name__ == "__main__":
@@ -125,8 +114,8 @@ if __name__ == "__main__":
 
 
   ## For webcam input:
-  # cap = cv2.VideoCapture(0)
-  cap = cv2.VideoCapture(-1)
+  cap = cv2.VideoCapture(1)
+  # cap = cv2.VideoCapture(-1)
 
 
   init_pb, init_pn = None, None
@@ -148,6 +137,7 @@ if __name__ == "__main__":
 
     I_out = I_out * 255
     I_out = I_out[:, ::-1]
+    Ipr = Ipr[:, ::-1]
 
     image = cv2.flip(image, 1)
 
@@ -157,8 +147,9 @@ if __name__ == "__main__":
     if pb is not None and pn is not None:
       image = cv2.circle(image, (int(pb[0]*width), int((1-pb[1])*height)), 5, (255, 0, 0), 2)
       image = cv2.circle(image, (int(pn[0]*width), int((1-pn[1])*height)), 5, (255, 0, 0), 2)    
+    cv2.imshow('Prob', Ipr)
+    cv2.imshow('Binary', I_out)
     cv2.imshow('MediaPipe Hands', image)
-    # cv2.imshow('MediaPipe Hands', I_out)
 
     if cv2.waitKey(5) & 0xFF == 27:
       break
@@ -217,22 +208,19 @@ if __name__ == "__main__":
         elif results.multi_handedness[-1].classification[0].label=='Left':
           pinky_tip_x = results.multi_hand_landmarks[-1].landmark[-1].x
           pinky_tip_y = results.multi_hand_landmarks[-1].landmark[-1].y
-        # else:
-        #   print('[gb] No left hand found!')
-        #   continue``
     
         if pinky_tip_x is not None and pinky_tip_y is not None:
           pinky_tip = np.array([pinky_tip_x, 1-pinky_tip_y])
           neck_vector = (valid_pb - valid_pn)
+          #  NOTE: vector method failed
           # pinky_prjection_to_neck =  (np.dot(neck_vector, pinky_tip) / np.linalg.norm(neck_vector)) * neck_vector /  np.linalg.norm(neck_vector)
           # rel_dist_from_nut = np.linalg.norm(pinky_prjection_to_neck) / np.linalg.norm(neck_vector)
+          # print(rel_dist_from_nut)
           
           rel_dist_from_nut = np.linalg.norm(pinky_tip-valid_pn)/np.linalg.norm(neck_vector)
 
-          # print(rel_dist_from_nut)
           if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
             prev_rel_dist_from_nut = rel_dist_from_nut
-            # print('AAAAAAAAAA')
 
           for hand_landmarks in results.multi_hand_landmarks:
               mp_drawing.draw_landmarks(
