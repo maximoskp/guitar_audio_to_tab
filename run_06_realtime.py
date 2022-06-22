@@ -105,7 +105,7 @@ if device_2_index >= 0:
 threaded_input = Thread( target=user_input_function )
 threaded_input.start()
 
-# after starting, check when n empties (file ends) and stop
+#### gbastas ####
 mu, cov = Hands_lib.learn_params()
 cov_init = np.copy(cov)
 mp_drawing = mp.solutions.drawing_utils
@@ -115,10 +115,13 @@ prevTime = 0
 prev_rel_dist_from_nut = 0
 pinky_tip_x, pinky_tip_y = None, None
 valid_Iout, valid_pb, valid_pn = None, None, None
+#### gbastas ####
+# after starting, check when n empties (file ends) and stop
 with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
 
     while output1.is_active() and not user_terminated and cap.isOpened():
 
+        #### gbastas ####
         success, image = cap.read()
         width =  image.shape[1]
         height = image.shape[0]
@@ -127,7 +130,9 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
             continue
 
         Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
-        pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut)
+        if (pb is not None and pn is not None):
+            image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, 
+        #### gbastas ####                                                                                            valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
 
 
         bb = copy.deepcopy( global_block[:1600] )
@@ -146,6 +151,9 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
         plt.show()
         plt.pause(0.01)
+
+
+
 
 print('stopping audio')
 output1.stop_stream()

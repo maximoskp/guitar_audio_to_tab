@@ -148,23 +148,6 @@ if __name__ == "__main__":
 
   ## For webcam input:
   cap = cv2.VideoCapture(0)
-  # cap = cv2.VideoCapture(-1)
-  # init_pb, init_pn = None, None
-  # while cap.isOpened():
-  #   success, image = cap.read()
-  #   if not success:
-  #     print("Ignoring empty camera frame.")
-  #     # If loading a video, use 'break' instead of 'continue'.
-  #     continue
-  #   width =  image.shape[1]
-  #   height = image.shape[0]
-  #   Ipr, I_out, pb, pn = get_markers(image, mu, cov, threshold=threshold/100)
-
-  #   if pb is not None and pn is not None:
-  #     init_pb, init_pn = pb, pn
-
-  # valid_Iout, valid_pb, valid_pn = np.copy(I_out), np.copy(init_pb), np.copy(init_pn)
-  # print("pb, pn", pb, pn)
   prevTime = 0
   prev_rel_dist_from_nut = 0
   pinky_tip_x, pinky_tip_y = None, None

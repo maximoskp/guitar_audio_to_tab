@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
 
   ## For webcam input:
-  cap = cv2.VideoCapture(1)
+  cap = cv2.VideoCapture(0)
   # cap = cv2.VideoCapture(-1)
 
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
   # pn = np.array([0.1, 0.5])
   valid_Iout, valid_pb, valid_pn = np.copy(I_out), np.copy(init_pb), np.copy(init_pn)
   # valid_pb, valid_pn = None, None
-  print("pb, pn", pb, pn)
+  # print("pb, pn", pb, pn)
   prevTime = 0
   prev_rel_dist_from_nut = 0
   pinky_tip_x, pinky_tip_y = None, None
