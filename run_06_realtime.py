@@ -12,6 +12,11 @@ import matplotlib.pyplot as plt
 from time import sleep
 from threading import Thread
 import copy
+import cv2
+import Hands_lib
+import mediapipe as mp
+
+
 
 # load model
 model = keras.models.load_model( 'models/tab_full_CNN_out_current_best.hdf5' )
@@ -101,23 +106,46 @@ threaded_input = Thread( target=user_input_function )
 threaded_input.start()
 
 # after starting, check when n empties (file ends) and stop
-while output1.is_active() and not user_terminated:
-    bb = copy.deepcopy( global_block[:1600] )
-    if np.max( np.abs( bb ) ) > 0.05:
-        bb = bb/np.max( np.abs( bb ) )
-    y_pred = model.predict( np.reshape( bb, (1,1600,1) ) )
-    plt.clf()
-    plt.subplot(2,1,1)
-    plt.plot( bb )
-    plt.ylim([-1,1])
-    plt.xticks([])
-    plt.title('input')
-    plt.subplot(2,1,2)
-    plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
-    plt.title('output')
-    # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
-    plt.show()
-    plt.pause(0.01)
+mu, cov = Hands_lib.learn_params()
+cov_init = np.copy(cov)
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+cap = cv2.VideoCapture(1)
+prevTime = 0
+prev_rel_dist_from_nut = 0
+pinky_tip_x, pinky_tip_y = None, None
+valid_Iout, valid_pb, valid_pn = None, None, None
+with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+
+    while output1.is_active() and not user_terminated and cap.isOpened():
+
+        success, image = cap.read()
+        width =  image.shape[1]
+        height = image.shape[0]
+        if not success:
+            print("Ignoring empty camera frame.")
+            continue
+
+        Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
+        pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut)
+
+
+        bb = copy.deepcopy( global_block[:1600] )
+        if np.max( np.abs( bb ) ) > 0.05:
+            bb = bb/np.max( np.abs( bb ) )
+        y_pred = model.predict( np.reshape( bb, (1,1600,1) ) )
+        plt.clf()
+        plt.subplot(2,1,1)
+        plt.plot( bb )
+        plt.ylim([-1,1])
+        plt.xticks([])
+        plt.title('input')
+        plt.subplot(2,1,2)
+        plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
+        plt.title('output')
+        # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
+        plt.show()
+        plt.pause(0.01)
 
 print('stopping audio')
 output1.stop_stream()
