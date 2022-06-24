@@ -19,7 +19,7 @@ import mediapipe as mp
 # pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa
 
 # load model
-model = keras.models.load_model( 'models/tab_full_CNN_out_current_best.hdf5' )
+model = keras.models.load_model( 'models/hand/tab_hand_full_CNN_out_current_best.hdf5' )
 
 device_1_index = 0
 device_2_index = -1
@@ -125,6 +125,7 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         success, image = cap.read()
         width =  image.shape[1]
         height = image.shape[0]
+        pinky_binary = np.zeros(25)
         if not success:
             print("Ignoring empty camera frame.")
             continue
@@ -132,13 +133,13 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
         if (pb is not None and pn is not None):
             image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, 
-        #### gbastas ####                                                                                            valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
-
+                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
+        #### gbastas ####
 
         bb = copy.deepcopy( global_block[:1600] )
         if np.max( np.abs( bb ) ) > 0.05:
             bb = bb/np.max( np.abs( bb ) )
-        y_pred = model.predict( np.reshape( bb, (1,1600,1) ) )
+        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), pinky_binary ] )
         plt.clf()
         plt.subplot(2,1,1)
         plt.plot( bb )
