@@ -16,7 +16,7 @@ import cv2
 import Hands_lib
 import mediapipe as mp
 
-
+# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa
 
 # load model
 model = keras.models.load_model( 'models/tab_full_CNN_out_current_best.hdf5' )
