@@ -10,6 +10,7 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import math 
 
 def get_markers(I, mu, cov, threshold=None):
   global cov_init
@@ -164,6 +165,8 @@ if __name__ == "__main__":
   prevTime = 0
   prev_rel_dist_from_nut = 0
   pinky_tip_x, pinky_tip_y = None, None
+  pinky_binary = np.zeros(25)
+  pinky_fret = -1
   with mp_hands.Hands(
       min_detection_confidence=0.5,       #Detection Sensitivity
       min_tracking_confidence=0.5) as hands:
@@ -219,8 +222,18 @@ if __name__ == "__main__":
           
           rel_dist_from_nut = np.linalg.norm(pinky_tip-valid_pn)/np.linalg.norm(neck_vector)
 
+
           if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
             prev_rel_dist_from_nut = rel_dist_from_nut
+
+
+          c = 1.059463
+          C = 1/c**24
+          L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula,  by setting LO = 1 + L24 [https://www.omnicalculator.com/other/fret]
+          L0 = 1 + L24
+          pinky_fret = int( math.log(L0/(L0-prev_rel_dist_from_nut), c) ) # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
+          # pinky_binary[pinky_fret] = 1
+
 
           for hand_landmarks in results.multi_hand_landmarks:
               mp_drawing.draw_landmarks(
@@ -230,7 +243,7 @@ if __name__ == "__main__":
       fps = 1 / (currTime - prevTime)
       prevTime = currTime
       # cv2.putText(image, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
-      cv2.putText(image, f'Pinky Position: {round(prev_rel_dist_from_nut,2)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
+      cv2.putText(image, f'Pinky Position: {round(prev_rel_dist_from_nut,2), pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
       image[:,:,0] = np.maximum(image[:,:,0], valid_Iout)
       image[:, :, 1] = np.maximum(image[:, :, 1], valid_Iout)
