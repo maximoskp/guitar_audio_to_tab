@@ -12,14 +12,13 @@ import numpy as np
 import time
 import math
 
-def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y):
-  if (pb is not None and pn is not None):
-    valid_pb, valid_pn = pb, pn
+def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands):
+  valid_pb, valid_pn = pb, pn
 
-  if (pb is not None and pn is not None and valid_pb is not None and valid_pn is not None) and np.linalg.norm(pb - valid_pb) < 0.1 and np.linalg.norm(pn - valid_pn) < 0.1:
-    valid_pb, valid_pn = np.copy(pb), np.copy(pn)
-    valid_Iout = I_out * 255
-    valid_Iout = valid_Iout[:, ::-1]
+  # if np.linalg.norm(pb - valid_pb) < 0.1 and np.linalg.norm(pn - valid_pn) < 0.1:
+  valid_pb, valid_pn = np.copy(pb), np.copy(pn)
+  valid_Iout = I_out * 255
+  valid_Iout = valid_Iout[:, ::-1]
 
   hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
   h, s, v = cv2.split(hsv)
@@ -64,12 +63,8 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 def get_markers(I, mu, cov, threshold=None):
   global cov_init
   I = cv2.cvtColor(I, cv2.COLOR_BGR2RGB)
-  IYCrCb = cv2.cvtColor(I, cv2.COLOR_RGB2YCR_CB)  # (Y, Cr, Cb) standard cv2 conversion from RGB
   Ihsv = cv2.cvtColor(I, cv2.COLOR_RGB2HSV)  # (H, S, V) standard cv2 conversion from RGB
-  # ICbCr = IYCrCb[:, :,:-3:-1]  # keep last two items, reversed (check: https://stackoverflow.com/questions/509211/understanding-slice-notation)
-  # Ihsv = Ihsv[:, :, 0:3:2]  # keep first an last items
   Ihs = Ihsv[:, :, :2]  # keep first two items
-  # Ipr = multivariate_normal.pdf(ICbCr, mu, cov)  # marker probability image
   try: 
     Ipr = multivariate_normal.pdf(Ihs, mu, cov)  # skin probability image
   except ValueError as e:
@@ -89,11 +84,6 @@ def get_markers(I, mu, cov, threshold=None):
   # Automatic labeling (by neighbour)
   I_labeled, nb_labels = scipy.ndimage.label(Icls)
 
-  # TODO: maybe need to keep top2 classes with regard to area
-
-  # if nb_labels<2 or nb_labels>4:
-  #   return Icls, None, None
-
   try:
     body_marker = np.where(I_labeled == 1)
     xb, yb = int(np.mean(body_marker[1]))/I_labeled.shape[1], int(np.mean(body_marker[0]))/I_labeled.shape[0]
@@ -109,20 +99,6 @@ def get_markers(I, mu, cov, threshold=None):
     return Ipr, Icls, None, None
 
 
-def onTrack1(val):
-    global mu
-    print(mu[0], val)
-    mu[0]=val
-    # print('Mu Hue',mu[0])
-def onTrack2(val):
-    global mu
-    mu[1]=val
-    # print('Mu Sat',mu[1])
-def onTrack5(val):
-    global threshold
-    threshold=val
-
-
 def learn_params():
   Mrk = cv2.imread('marker_samples4.png')
   mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
@@ -136,22 +112,25 @@ if __name__ == "__main__":
   mu, cov = learn_params()
   cov_init = np.copy(cov)
 
-  #Created by MediaPipe
-  #Modified by Augmented Startups 2021
-  #Pose-Estimation in 5 Minutes
-  #Watch 5 Minute Tutorial at www.augmentedstartups.info/YouTube
   mp_drawing = mp.solutions.drawing_utils
   mp_hands = mp.solutions.hands
 
   threshold=15
   valid_Iout, valid_pb, valid_pn = None, None, None
 
+
+  c = 1.059463
+  C = 1/c**24
+  L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula,  by setting LO = 1 + L24 [https://www.omnicalculator.com/other/fret]
+  L0 = 1 + L24
+
   ## For webcam input:
   cap = cv2.VideoCapture(0)
   prevTime = 0
-  prev_rel_dist_from_nut = 0
+  pinky_pos = 0
   pinky_tip_x, pinky_tip_y = None, None
   pinky_binary = np.zeros(25)
+  pinky_fret = 0
   with mp_hands.Hands(
       min_detection_confidence=0.5,       #Detection Sensitivity
       min_tracking_confidence=0.5) as hands:
@@ -163,18 +142,18 @@ if __name__ == "__main__":
         print("Ignoring empty camera frame.")
         continue
 
-
       Ipr, I_out, pb, pn = get_markers(image, mu, cov, threshold=threshold/100)
       if (pb is not None and pn is not None):
-        image, pinky_pos, valid_Iout, valid_pb, valid_pn = compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
+        image, pinky_pos, valid_Iout, valid_pb, valid_pn = compute_pinky_rel_position(image, I_out, pb, pn, pinky_pos, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands)
         image.flags.writeable = True
         # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        c = 1.059463
-        pinky_fret = int( math.log(1/(1-pinky_pos), c) )
+        pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
+        pinky_fret = min(pinky_fret, 24) 
+        pinky_fret = max(pinky_fret, 0)
         pinky_binary[pinky_fret] = 1
 
-        cv2.putText(image, f'Pinky Position: {pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
+        cv2.putText(image, f'Pinky Position: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
         if valid_Iout is not None:
           image[:,:,0] = np.maximum(image[:,:,0], valid_Iout)

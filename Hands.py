@@ -1,6 +1,6 @@
 # https://medium.com/augmented-startups/hand-tracking-30-fps-on-cpu-in-5-minutes-986a749709d7
 
-# conda create --name cv python=3.8
+# conda create --name cv python=3.7
 # pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy
 
 import cv2
@@ -232,8 +232,6 @@ if __name__ == "__main__":
           L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula,  by setting LO = 1 + L24 [https://www.omnicalculator.com/other/fret]
           L0 = 1 + L24
           pinky_fret = int( math.log(L0/(L0-prev_rel_dist_from_nut), c) ) # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
-          # pinky_binary[pinky_fret] = 1
-
 
           for hand_landmarks in results.multi_hand_landmarks:
               mp_drawing.draw_landmarks(
