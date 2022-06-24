@@ -15,6 +15,7 @@ import copy
 import cv2
 import Hands_lib
 import mediapipe as mp
+import math
 
 # pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa
 
@@ -135,6 +136,10 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
             image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, 
                                                                                                     valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
         #### gbastas ####
+
+        c = 1.059463
+        pinky_fret = int( math.log(1/(1-pinky_pos), c) )
+        pinky_binary[pinky_fret] = 1
 
         bb = copy.deepcopy( global_block[:1600] )
         if np.max( np.abs( bb ) ) > 0.05:

@@ -10,7 +10,7 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-
+import math
 
 def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y):
   if (pb is not None and pn is not None):
@@ -151,6 +151,7 @@ if __name__ == "__main__":
   prevTime = 0
   prev_rel_dist_from_nut = 0
   pinky_tip_x, pinky_tip_y = None, None
+  pinky_binary = np.zeros(25)
   with mp_hands.Hands(
       min_detection_confidence=0.5,       #Detection Sensitivity
       min_tracking_confidence=0.5) as hands:
@@ -162,12 +163,18 @@ if __name__ == "__main__":
         print("Ignoring empty camera frame.")
         continue
 
+
       Ipr, I_out, pb, pn = get_markers(image, mu, cov, threshold=threshold/100)
       if (pb is not None and pn is not None):
         image, pinky_pos, valid_Iout, valid_pb, valid_pn = compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y)
         image.flags.writeable = True
         # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        cv2.putText(image, f'Pinky Position: {pinky_pos}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
+
+        c = 1.059463
+        pinky_fret = int( math.log(1/(1-pinky_pos), c) )
+        pinky_binary[pinky_fret] = 1
+
+        cv2.putText(image, f'Pinky Position: {pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
         if valid_Iout is not None:
           image[:,:,0] = np.maximum(image[:,:,0], valid_Iout)
