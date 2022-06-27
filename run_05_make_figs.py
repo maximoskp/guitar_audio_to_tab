@@ -57,6 +57,8 @@ for session in range(10):
 
     # y_pred = model.predict( x_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:] )
     # y_true = y_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
+    print(x_audio_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:].shape)
+    print(x_hand_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:].shape)
     y_pred = model.predict( [x_audio_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:], [x_hand_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:]]] )
     y_true = y_tab_test[tmp_rnd_idx:tmp_rnd_idx+1,:,:,:]
 

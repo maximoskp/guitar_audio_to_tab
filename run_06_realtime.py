@@ -37,6 +37,7 @@ for i in range(p.get_device_count()):
     if 'Mic/Line In 3/4 (Studio 18' in d['name'] and d['hostApi'] == 0:
         device_2_index = d['index']
 
+
 WINDOW_SIZE = 2048
 CHANNELS = 1
 RATE = 16000
@@ -91,20 +92,20 @@ output1 = p.open(format=pyaudio.paInt16,
                 frames_per_buffer=WINDOW_SIZE,
                 stream_callback=callback)
 
-if device_2_index >= 0:
-    output2 = p.open(format=pyaudio.paInt16,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    output=True,
-                    input=True,
-                    input_device_index=device_2_index,
-                    frames_per_buffer=WINDOW_SIZE,
-                    stream_callback=callback)
+# if device_2_index >= 0:
+#     output2 = p.open(format=pyaudio.paInt16,
+#                     channels=CHANNELS,
+#                     rate=RATE,
+#                     output=True,
+#                     input=True,
+#                     input_device_index=device_2_index,
+#                     frames_per_buffer=WINDOW_SIZE,
+#                     stream_callback=callback)
 
 
 output1.start_stream()
-if device_2_index >= 0:
-    output2.start_stream()
+#if device_2_index >= 0:
+#    output2.start_stream()
 
 threaded_input = Thread( target=user_input_function )
 threaded_input.start()
@@ -123,6 +124,8 @@ prevTime = 0
 pinky_pos = 0
 pinky_tip_x, pinky_tip_y = None, None
 valid_Iout, valid_pb, valid_pn = None, None, None
+# interactive matplotlib mode
+plt.ion()
 # after starting, check when n empties (file ends) and stop
 with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
 
@@ -132,9 +135,9 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         success, image = cap.read()
         width =  image.shape[1]
         height = image.shape[0]
+
         pinky_binary = np.zeros(25)
         
-        # pinky_binary[5] = 1 # NOTE: TODELETE
 
         if not success:
             print("Ignoring empty camera frame.")
@@ -143,14 +146,14 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
         if (pb is not None and pn is not None):
             image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, pinky_pos, prevTime, 
-                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands)
+                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
 
             pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
             pinky_fret = min(pinky_fret, 24) 
             pinky_fret = max(pinky_fret, 0)
             pinky_binary[pinky_fret] = 1
 
-            print(pinky_fret)
+            print('pinky_fret:',pinky_fret)
 
             cv2.putText(image, f'Pinky Position: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
@@ -160,13 +163,19 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
                 image[:, :, 2] = np.maximum(image[:, :, 2], valid_Iout)
                 image = cv2.circle(image, (int(valid_pb[0]*width), int((1-valid_pb[1])*height)), 5, (255, 0, 0), 2)
                 image = cv2.circle(image, (int(valid_pn[0]*width), int((1-valid_pn[1])*height)), 5, (255, 0, 0), 2)
-                cv2.imshow('MediaPipe Hands', image )
+        else:
+            image = cv2.flip(image, 1) 
+
+        cv2.imshow('MediaPipe Hands', image )
         #### gbastas ####
 
         bb = copy.deepcopy( global_block[:1600] )
         if np.max( np.abs( bb ) ) > 0.05:
             bb = bb/np.max( np.abs( bb ) )
-        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), pinky_binary ] )
+
+        # print(np.reshape( bb, (1,1600,1) ).shape)    
+        # print(pinky_binary.shape)
+        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(pinky_binary, (1,25,1) )] ] )
         plt.clf()
         plt.subplot(2,1,1)
         plt.plot( bb )
@@ -185,5 +194,5 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
 
 print('stopping audio')
 output1.stop_stream()
-if device_2_index >= 0:
-    output2.stop_stream()
+# if device_2_index >= 0:
+#     output2.stop_stream()

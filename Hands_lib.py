@@ -12,13 +12,14 @@ import numpy as np
 import time
 import math
 
-def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands):
-  valid_pb, valid_pn = pb, pn
+def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands):
+  if valid_pb is None or valid_pn is None:
+    valid_pb, valid_pn = pb, pn
 
-  # if np.linalg.norm(pb - valid_pb) < 0.1 and np.linalg.norm(pn - valid_pn) < 0.1:
-  valid_pb, valid_pn = np.copy(pb), np.copy(pn)
-  valid_Iout = I_out * 255
-  valid_Iout = valid_Iout[:, ::-1]
+  if np.linalg.norm(pb - pn) > 0.1:
+    valid_pb, valid_pn = np.copy(pb), np.copy(pn)
+    valid_Iout = I_out * 255
+    valid_Iout = valid_Iout[:, ::-1]
 
   hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
   h, s, v = cv2.split(hsv)
