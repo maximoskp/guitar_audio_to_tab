@@ -39,7 +39,7 @@ sr = g.constants.sample_rate
 dataset = []
 
 # keep top_k
-top_k = 2000
+top_k = 3000
 # sample duration in samples
 samples2keep = sr//10
 samplesstep = samples2keep//2
@@ -49,11 +49,14 @@ for i in range(top_k):
     p = sorted_patterns[i]['pattern']
     # non-rollable have free chord and a span greater than 5 frets
     rollable = True
-    tmp_sum = np.sum( p , axis=1 )
+    tmp_sum = np.sum( p , axis=0 )
     if np.sum(tmp_sum) != 0:
         nnz_tmp_sum = np.where( tmp_sum != 0 )[0]
-        if nnz_tmp_sum[-1] == 0 and nnz_tmp_sum[-1]-nnz_tmp_sum[0] > 5:
+        # print(p)
+        # print('nnz_tmp_sum: ', nnz_tmp_sum)
+        if nnz_tmp_sum[-1]-nnz_tmp_sum[0] > 5:
             rollable = False
+            print('non-rollable')
         if rollable:
             highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
             hand = np.zeros(25)

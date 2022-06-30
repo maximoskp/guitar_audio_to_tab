@@ -12,9 +12,18 @@ import matplotlib.pyplot as plt
 from time import sleep
 from threading import Thread
 import copy
+import cv2
+import Hands_lib
+import mediapipe as mp
+import math
+
+# conda create av-guit python=3.7
+# conda activate av-guit
+# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5
+# conda install -c anaconda pyaudio
 
 # load model
-model = keras.models.load_model( 'models/tab_full_CNN_out_current_best.hdf5' )
+model = keras.models.load_model( 'models/hand/tab_hand_full_CNN_out_current_best.hdf5' )
 
 device_1_index = 0
 device_2_index = -1
@@ -27,6 +36,7 @@ for i in range(p.get_device_count()):
         device_1_index = d['index']
     if 'Mic/Line In 3/4 (Studio 18' in d['name'] and d['hostApi'] == 0:
         device_2_index = d['index']
+
 
 WINDOW_SIZE = 2048
 CHANNELS = 1
@@ -82,44 +92,107 @@ output1 = p.open(format=pyaudio.paInt16,
                 frames_per_buffer=WINDOW_SIZE,
                 stream_callback=callback)
 
-if device_2_index >= 0:
-    output2 = p.open(format=pyaudio.paInt16,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    output=True,
-                    input=True,
-                    input_device_index=device_2_index,
-                    frames_per_buffer=WINDOW_SIZE,
-                    stream_callback=callback)
+# if device_2_index >= 0:
+#     output2 = p.open(format=pyaudio.paInt16,
+#                     channels=CHANNELS,
+#                     rate=RATE,
+#                     output=True,
+#                     input=True,
+#                     input_device_index=device_2_index,
+#                     frames_per_buffer=WINDOW_SIZE,
+#                     stream_callback=callback)
 
 
 output1.start_stream()
-if device_2_index >= 0:
-    output2.start_stream()
+#if device_2_index >= 0:
+#    output2.start_stream()
 
 threaded_input = Thread( target=user_input_function )
 threaded_input.start()
 
+#### gbastas ####
+c = 1.059463
+C = 1/c**24
+L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula,  by setting LO = 1 + L24 [https://www.omnicalculator.com/other/fret]
+L0 = 1 + L24
+mu, cov = Hands_lib.learn_params()
+cov_init = np.copy(cov)
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+cap = cv2.VideoCapture(0)
+prevTime = 0
+pinky_pos = 0
+pinky_tip_x, pinky_tip_y = None, None
+valid_Iout, valid_pb, valid_pn = None, None, None
+# interactive matplotlib mode
+plt.ion()
 # after starting, check when n empties (file ends) and stop
-while output1.is_active() and not user_terminated:
-    bb = copy.deepcopy( global_block[:1600] )
-    if np.max( np.abs( bb ) ) > 0.05:
-        bb = bb/np.max( np.abs( bb ) )
-    y_pred = model.predict( np.reshape( bb, (1,1600,1) ) )
-    plt.clf()
-    plt.subplot(2,1,1)
-    plt.plot( bb )
-    plt.ylim([-1,1])
-    plt.xticks([])
-    plt.title('input')
-    plt.subplot(2,1,2)
-    plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
-    plt.title('output')
-    # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
-    plt.show()
-    plt.pause(0.01)
+with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+
+    while output1.is_active() and not user_terminated and cap.isOpened():
+
+        #### gbastas ####
+        success, image = cap.read()
+        width =  image.shape[1]
+        height = image.shape[0]
+
+        pinky_binary = np.zeros(25)
+        
+
+        if not success:
+            print("Ignoring empty camera frame.")
+            continue
+
+        Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
+        if (pb is not None and pn is not None):
+            image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, pinky_pos, prevTime, 
+                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
+
+            pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
+            pinky_fret = min(pinky_fret, 24) 
+            pinky_fret = max(pinky_fret, 0)
+            pinky_binary[pinky_fret] = 1
+
+            print('pinky_fret:',pinky_fret)
+
+            cv2.putText(image, f'Pinky Position: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
+
+            if valid_Iout is not None:
+                image[:,:,0] = np.maximum(image[:,:,0], valid_Iout)
+                image[:, :, 1] = np.maximum(image[:, :, 1], valid_Iout)
+                image[:, :, 2] = np.maximum(image[:, :, 2], valid_Iout)
+                image = cv2.circle(image, (int(valid_pb[0]*width), int((1-valid_pb[1])*height)), 5, (255, 0, 0), 2)
+                image = cv2.circle(image, (int(valid_pn[0]*width), int((1-valid_pn[1])*height)), 5, (255, 0, 0), 2)
+        else:
+            image = cv2.flip(image, 1) 
+
+        cv2.imshow('MediaPipe Hands', image )
+        #### gbastas ####
+
+        bb = copy.deepcopy( global_block[:1600] )
+        if np.max( np.abs( bb ) ) > 0.05:
+            bb = bb/np.max( np.abs( bb ) )
+
+        # print(np.reshape( bb, (1,1600,1) ).shape)    
+        # print(pinky_binary.shape)
+        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(pinky_binary, (1,25,1) )] ] )
+        plt.clf()
+        plt.subplot(2,1,1)
+        plt.plot( bb )
+        plt.ylim([-1,1])
+        plt.xticks([])
+        plt.title('input')
+        plt.subplot(2,1,2)
+        plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
+        plt.title('output')
+        # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
+        plt.show()
+        plt.pause(0.01)
+
+
+
 
 print('stopping audio')
 output1.stop_stream()
-if device_2_index >= 0:
-    output2.stop_stream()
+# if device_2_index >= 0:
+#     output2.stop_stream()
