@@ -25,4 +25,4 @@ my_downloader.directory = 'my_dir/'
 # Change File extension type
 my_downloader.extensions = '.jpg'
 print(my_downloader.extensions)
-my_downloader.download('playing-guitar-youtube', limit=5000, verbose=True)
+my_downloader.download('guitar-benson-solo', limit=30, verbose=True)
