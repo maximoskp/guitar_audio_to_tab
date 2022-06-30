@@ -1,6 +1,8 @@
 data/
 figs/
 models/
+fretboard_detection/dataset/
+simple_image_download/my_dir/
 simple_image_download/my_dir/extra/
 simple_image_download/my_dir/guitar-images/
 simple_image_download/my_dir/guitar-labels/
