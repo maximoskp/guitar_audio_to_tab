@@ -23,17 +23,16 @@ TEST_PATHS = os.path.sep.join([BASE_OUTPUT, "test_paths.txt"])
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PIN_MEMORY = True if DEVICE == "cuda" else False
 
-# TODO: for my dataset
-# specify ImageNet mean and standard deviation
-# MEAN = [0.485, 0.456, 0.406]
-# STD = [0.229, 0.224, 0.225]
+# TODO: for my dataset (may change overtime)
+MEAN = [0.3469, 0.3043, 0.2974]
+STD = [0.3204, 0.3003, 0.2957]
 
 # initialize our initial learning rate, number of epochs to train
 # for, and the batch size
 INIT_LR = 1e-4
-NUM_EPOCHS = 20
-BATCH_SIZE = 32
+NUM_EPOCHS = 100
+BATCH_SIZE = 8
 
 # specify the loss weights
-LABELS = 1.0
+# LABELS = 1.0
 BBOX = 1.0
