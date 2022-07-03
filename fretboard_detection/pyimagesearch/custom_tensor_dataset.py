@@ -25,8 +25,8 @@ class CustomTensorDataset(Dataset):
 			image, bbox = self.augment_transforms(np.array(image), np.array(bbox[None,:]))
 			# sometimes augmentation fails and we just keep the standard training sample
 			try:
-				print(image.shape)
-				print(bbox[0].shape)
+				# print(image.shape)
+				# print(bbox[0].shape)
 				image = torch.tensor(image)
 				bbox = torch.tensor(bbox[0])
 				bbox = self.from_standard_to_yolo(bbox)

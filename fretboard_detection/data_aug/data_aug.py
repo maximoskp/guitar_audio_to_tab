@@ -1,3 +1,4 @@
+# https://blog.paperspace.com/data-augmentation-for-object-detection-building-input-pipelines/
 import random
 import numpy as np
 import cv2
