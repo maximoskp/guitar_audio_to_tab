@@ -42,7 +42,7 @@ for txtPath in paths.list_files(config.ANNOTS_PATH, validExts=(".txt")):
 		imagePath = os.path.sep.join([config.IMAGES_PATH, Labels[labelID], filename])
 		image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
 		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-		image = cv2.resize(image, (224, 224)) # ????!!!
+		image = cv2.resize(image, (224, 224)) # no need to resize bboxes since they are set with relevant values [0,1]
 
 		data.append(image)
 		labels.append(Labels[labelID])
@@ -88,6 +88,13 @@ transforms = transforms.Compose([
 	transforms.Normalize(mean=MEAN, std=STD)
 ])
 
+transforms = transforms.Compose([
+	transforms.ToPILImage(),
+	transforms.ToTensor(),
+	transforms.RandomAffine(degrees=(-10,30), translate=(0.1, 0.3), scale=(0.5, 0.75))
+])
+
+
 # convert NumPy arrays to PyTorch datasets
 trainDS = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
 	transforms=transforms)
@@ -112,7 +119,8 @@ f.close()
 resnet = resnet50(pretrained=True)
 
 for param in resnet.parameters():
-	param.requires_grad = False
+	# param.requires_grad = False
+	param.requires_grad = True
 
 # create our custom object detector model and flash it to the current
 # device

@@ -30,7 +30,7 @@ STD = [0.3204, 0.3003, 0.2957]
 # initialize our initial learning rate, number of epochs to train
 # for, and the batch size
 INIT_LR = 1e-4
-NUM_EPOCHS = 100
+NUM_EPOCHS = 250
 BATCH_SIZE = 8
 
 # specify the loss weights

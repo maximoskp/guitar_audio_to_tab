@@ -17,9 +17,9 @@ import Hands_lib
 import mediapipe as mp
 import math
 
-# conda create av-guit python=3.7
+# conda create --name av-guit python=3.7
 # conda activate av-guit
-# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5
+# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils
 # conda install -c anaconda pyaudio
 
 # load model
