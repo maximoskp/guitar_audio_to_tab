@@ -87,5 +87,6 @@ for imagePath in imagePaths:
 	cv2.rectangle(orig, (startX, startY), (endX, endY),
 		(0, 255, 0), 2)
 	# show the output image 
-	cv2.imshow("Output", orig)
-	cv2.waitKey(0)    
+	cv2.imwrite('example.jpeg', 255*orig)
+	# cv2.imshow("Output", orig)
+	# cv2.waitKey(0)   

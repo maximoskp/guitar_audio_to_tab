@@ -5,7 +5,7 @@ from pyimagesearch.bbox_regressor import ObjectDetector
 from pyimagesearch.custom_tensor_dataset import CustomTensorDataset
 from pyimagesearch import config
 from sklearn.preprocessing import LabelEncoder
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torchvision import transforms
 from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
@@ -21,6 +21,43 @@ import torch
 import time
 import cv2
 import os
+import random
+from data_aug import data_aug
+
+def from_yolo_to_standard(bboxes):
+	bboxes[:,0] = bboxes[:,0] - bboxes[:,2]/2
+	bboxes[:,1] = bboxes[:,1]- bboxes[:,3]/2
+	bboxes[:,2] = bboxes[:,0]+ bboxes[:,2]/2
+	bboxes[:,3] = bboxes[:,1]+ bboxes[:,3]/2
+	return bboxes
+
+def from_standard_to_yolo(bboxes):
+	bboxes[:,0] = (bboxes[:,0] + bboxes[:,2])/2
+	bboxes[:,1] = (bboxes[:,1] + bboxes[:,3])/2
+	bboxes[:,2] = bboxes[:,2] - bboxes[:,0]
+	bboxes[:,3] = bboxes[:,3] - bboxes[:,1]
+	return bboxes
+
+# https://blog.paperspace.com/data-augmentation-for-object-detection-building-input-pipelines/
+class Sequence(object):
+	def __init__(self, augmentations, probs = 1):
+
+		
+		self.augmentations = augmentations
+		self.probs = probs
+
+	def __call__(self, images, bboxes):
+		for i, augmentation in enumerate(self.augmentations):
+			if type(self.probs) == list:
+				prob = self.probs[i]
+			else:
+				prob = self.probs
+				
+			if random.random() < prob:
+				images, bboxes = augmentation(images, bboxes)
+		return images, bboxes
+
+
 # initialize the list of data (images), class labels, target bounding
 # box coordinates, and image paths
 print("[INFO] loading dataset...")
@@ -65,6 +102,19 @@ split = train_test_split(data, labels, bboxes, imagePaths,
 (trainBBoxes, testBBoxes) = split[4:6]
 (trainPaths, testPaths) = split[6:]
 
+
+# # __gbastas__
+# print(trainImages.shape, trainBBoxes.shape)
+
+# augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+# trainBBoxes_aug = from_yolo_to_standard(trainBBoxes)
+# trainImages_aug, trainBBoxes_aug = augment_transforms(trainImages, trainBBoxes_aug)
+# trainBBoxes_aug = from_standard_to_yolo(trainBBoxes_aug)
+# trainImages, trainBBoxes = torch.stack([trainImages, trainImages_aug]), torch.stack([trainBBoxes, trainBBoxes_aug])
+
+# print(trainImages.shape, trainBBoxes.shape)
+
+
 # convert NumPy arrays to PyTorch tensors
 (trainImages, testImages) = torch.tensor(trainImages),\
 	torch.tensor(testImages)
@@ -76,11 +126,11 @@ split = train_test_split(data, labels, bboxes, imagePaths,
 
 # __gbastas__
 MEAN, STD = trainImages.mean([0,1,2]), trainImages.std([0,1,2])
-
-
 print(MEAN)
 print(STD)
-# aaaa
+
+
+# augment_transforms = None
 # define normalization transforms
 transforms = transforms.Compose([
 	transforms.ToPILImage(),
@@ -88,16 +138,18 @@ transforms = transforms.Compose([
 	transforms.Normalize(mean=MEAN, std=STD)
 ])
 
-# transforms = transforms.Compose([
-# 	transforms.ToPILImage(),
-# 	transforms.ToTensor(),
-# 	transforms.RandomAffine(degrees=(-10,30), translate=(0.1, 0.3), scale=(0.5, 0.75))
-# ])
 
+augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
 
 # convert NumPy arrays to PyTorch datasets
 trainDS = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
-	transforms=transforms)
+	transforms=transforms, augment_transforms=augment_transforms)
+# TODO:	
+# trainDS_trans = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+# 	transforms=transforms, augment_transforms=augment_transforms)
+
+# trainDS = ConcatDataset([trainDS, trainDS_trans])
+
 testDS = CustomTensorDataset((testImages, testLabels, testBBoxes),
 	transforms=transforms)
 print("[INFO] total training samples: {}...".format(len(trainDS)))
@@ -110,6 +162,7 @@ trainLoader = DataLoader(trainDS, batch_size=config.BATCH_SIZE,
 	shuffle=True, num_workers=os.cpu_count(), pin_memory=config.PIN_MEMORY)
 testLoader = DataLoader(testDS, batch_size=config.BATCH_SIZE,
 	num_workers=os.cpu_count(), pin_memory=config.PIN_MEMORY)
+
 
 
 print("[INFO] saving testing image paths...")
