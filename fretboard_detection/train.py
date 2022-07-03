@@ -88,11 +88,11 @@ transforms = transforms.Compose([
 	transforms.Normalize(mean=MEAN, std=STD)
 ])
 
-transforms = transforms.Compose([
-	transforms.ToPILImage(),
-	transforms.ToTensor(),
-	transforms.RandomAffine(degrees=(-10,30), translate=(0.1, 0.3), scale=(0.5, 0.75))
-])
+# transforms = transforms.Compose([
+# 	transforms.ToPILImage(),
+# 	transforms.ToTensor(),
+# 	transforms.RandomAffine(degrees=(-10,30), translate=(0.1, 0.3), scale=(0.5, 0.75))
+# ])
 
 
 # convert NumPy arrays to PyTorch datasets
