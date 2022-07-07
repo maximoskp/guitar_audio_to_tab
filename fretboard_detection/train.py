@@ -23,20 +23,44 @@ import cv2
 import os
 import random
 from data_aug import data_aug
+import imutils
 
-def from_yolo_to_standard(bboxes):
-	bboxes[:,0] = bboxes[:,0] - bboxes[:,2]/2
-	bboxes[:,1] = bboxes[:,1]- bboxes[:,3]/2
-	bboxes[:,2] = bboxes[:,0]+ bboxes[:,2]/2
-	bboxes[:,3] = bboxes[:,1]+ bboxes[:,3]/2
-	return bboxes
 
-def from_standard_to_yolo(bboxes):
-	bboxes[:,0] = (bboxes[:,0] + bboxes[:,2])/2
-	bboxes[:,1] = (bboxes[:,1] + bboxes[:,3])/2
-	bboxes[:,2] = bboxes[:,2] - bboxes[:,0]
-	bboxes[:,3] = bboxes[:,3] - bboxes[:,1]
-	return bboxes
+def write_image_with_bbox(orig, bbox): #[0,255]
+
+	# orig = np.array(image).transpose(1,2,0)
+	(centerX, centerY, widthX, heightY) = bbox
+	(startX, startY, endX, endY) = (centerX - widthX/2, centerY - heightY/2, centerX + widthX/2, centerY + heightY/2)
+
+	orig = imutils.resize(orig, width=600)
+	(h, w) = orig.shape[:2]
+
+	startX = int(startX * w)
+	startY = int(startY * h)
+	endX = int(endX * w)
+	endY = int(endY * h)
+	y = startY - 10 if startY - 10 > 10 else startY + 10
+	cv2.putText(orig, 'neck', (startX, y), cv2.FONT_HERSHEY_SIMPLEX,
+		0.65, (0, 255, 0), 2)
+	cv2.rectangle(orig, (startX, startY), (endX, endY),
+		(0, 255, 0), 2)
+	orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
+	cv2.imwrite('check.jpeg', 255*orig)	
+
+
+# def from_yolo_to_standard(bboxes):
+# 	bboxes[:,0] = bboxes[:,0] - bboxes[:,2]/2
+# 	bboxes[:,1] = bboxes[:,1]- bboxes[:,3]/2
+# 	bboxes[:,2] = bboxes[:,0]+ bboxes[:,2]/2
+# 	bboxes[:,3] = bboxes[:,1]+ bboxes[:,3]/2
+# 	return bboxes
+
+# def from_standard_to_yolo(bboxes):
+# 	bboxes[:,0] = (bboxes[:,0] + bboxes[:,2])/2
+# 	bboxes[:,1] = (bboxes[:,1] + bboxes[:,3])/2
+# 	bboxes[:,2] = bboxes[:,2] - bboxes[:,0]
+# 	bboxes[:,3] = bboxes[:,3] - bboxes[:,1]
+# 	return bboxes
 
 # https://blog.paperspace.com/data-augmentation-for-object-detection-building-input-pipelines/
 class Sequence(object):
@@ -93,6 +117,33 @@ imagePaths = np.array(imagePaths)
 le = LabelEncoder()
 labels = le.fit_transform(labels)
 
+# def from_yolo_to_standard(bbox):
+	# startX = bbox[0] - bbox[2]/2
+	# startY = bbox[1] - bbox[3]/2
+	# endX = bbox[0] + bbox[2]/2
+	# endY = bbox[1] + bbox[3]/2
+	# bbox[0], bbox[1], bbox[2], bbox[3] = startX, startY, endX, endY
+	# return bbox
+
+
+# def from_standard_to_yolo(bbox):
+	# centerX = (bbox[0] + bbox[2])/2
+	# centerY = (bbox[1] + bbox[3])/2
+	# widthX = bbox[2] - bbox[0]
+	# heightY = bbox[3] - bbox[1]
+	# bbox[0], bbox[1], bbox[2], bbox[3] = centerX, centerY, widthX, heightY
+	# return bbox
+
+
+# augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+# bbox = from_yolo_to_standard(bboxes[1])
+# image = data[1]
+# image, bbox = augment_transforms(255*data[1], np.array(bbox[None,:]))
+# bbox = bbox[0]
+# bbox = from_standard_to_yolo(bbox)
+# write_image_with_bbox(image, bbox)
+# aaaa
+
 # partition the data into training and testing 
 split = train_test_split(data, labels, bboxes, imagePaths,
 	test_size=0.20, random_state=42)
@@ -101,19 +152,6 @@ split = train_test_split(data, labels, bboxes, imagePaths,
 (trainLabels, testLabels) = split[2:4]
 (trainBBoxes, testBBoxes) = split[4:6]
 (trainPaths, testPaths) = split[6:]
-
-
-# # __gbastas__
-# print(trainImages.shape, trainBBoxes.shape)
-
-# augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
-# trainBBoxes_aug = from_yolo_to_standard(trainBBoxes)
-# trainImages_aug, trainBBoxes_aug = augment_transforms(trainImages, trainBBoxes_aug)
-# trainBBoxes_aug = from_standard_to_yolo(trainBBoxes_aug)
-# trainImages, trainBBoxes = torch.stack([trainImages, trainImages_aug]), torch.stack([trainBBoxes, trainBBoxes_aug])
-
-# print(trainImages.shape, trainBBoxes.shape)
-
 
 # convert NumPy arrays to PyTorch tensors
 (trainImages, testImages) = torch.tensor(trainImages),\
@@ -138,17 +176,16 @@ transforms = transforms.Compose([
 	transforms.Normalize(mean=MEAN, std=STD)
 ])
 
-
-augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+# augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+augment_transforms = Sequence([data_aug.RandomScale((-0.4,0), diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
 
 # convert NumPy arrays to PyTorch datasets
 trainDS = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+	transforms=transforms)#, augment_transforms=augment_transforms)
+trainDS_trans = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
 	transforms=transforms, augment_transforms=augment_transforms)
-# TODO:	
-# trainDS_trans = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
-# 	transforms=transforms, augment_transforms=augment_transforms)
 
-# trainDS = ConcatDataset([trainDS, trainDS_trans])
+trainDS = ConcatDataset([trainDS, trainDS_trans])
 
 testDS = CustomTensorDataset((testImages, testLabels, testBBoxes),
 	transforms=transforms)
@@ -199,27 +236,45 @@ for e in tqdm(range(config.NUM_EPOCHS)):
 	# initialize the total training and validation loss
 	totalTrainLoss = 0
 	totalValLoss = 0
-	# initialize the number of correct predictions in the training
-	# and validation step
-	trainCorrect = 0
-	valCorrect = 0
 	# loop over the training set
 	for (images, labels, bboxes) in trainLoader:
+		if totalTrainLoss==0:
+			# print(np.array(images[0]).transpose(1,2,0).shape)
+			orig = np.array(images[0]).transpose(1,2,0)
+			write_image_with_bbox(orig, bboxes[0])
+			# (centerX, centerY, widthX, heightY) = bboxes[0]
+			# (startX, startY, endX, endY) = (centerX - widthX/2, centerY - heightY/2, centerX + widthX/2, centerY + heightY/2)
+
+			# orig = imutils.resize(orig, width=600)
+			# (h, w) = orig.shape[:2]
+
+			# startX = int(startX * w)
+			# startY = int(startY * h)
+			# endX = int(endX * w)
+			# endY = int(endY * h)
+			# y = startY - 10 if startY - 10 > 10 else startY + 10
+			# cv2.putText(orig, 'neck', (startX, y), cv2.FONT_HERSHEY_SIMPLEX,
+			# 	0.65, (0, 255, 0), 2)
+			# cv2.rectangle(orig, (startX, startY), (endX, endY),
+			# 	(0, 255, 0), 2)
+			# orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
+			# cv2.imwrite('check.jpeg', 255*orig)
+
+
+			# img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+			# cv2.imwrite('check.jpeg', 255*img)
 		# send the input to the device
 		(images, labels, bboxes) = (images.to(config.DEVICE), labels.to(config.DEVICE), bboxes.to(config.DEVICE))
 		# perform a forward pass and calculate the training loss
 		predictions = objectDetector(images)
 		bboxLoss = bboxLossFunc(predictions[0], bboxes)
 		totalLoss = bboxLoss
-		# classLoss = classLossFunc(predictions[1], labels)
-		# totalLoss = (config.BBOX * bboxLoss) + (config.LABELS * classLoss)
 
 		opt.zero_grad()
 		totalLoss.backward()
 		opt.step()
 
 		totalTrainLoss += totalLoss
-		# trainCorrect += (predictions[1].argmax(1) == labels).type(torch.float).sum().item()    
 
 	# switch off autograd
 	with torch.no_grad():
@@ -234,17 +289,11 @@ for e in tqdm(range(config.NUM_EPOCHS)):
 			predictions = objectDetector(images)
 			bboxLoss = bboxLossFunc(predictions[0], bboxes)
 			totalLoss = bboxLoss
-			# classLoss = classLossFunc(predictions[1], labels)
-			# totalLoss = (config.BBOX * bboxLoss) + (config.LABELS * classLoss)
 			totalValLoss += totalLoss
-			# calculate the number of correct predictions
-			# valCorrect += (predictions[1].argmax(1) == labels).type(torch.float).sum().item()
 	# calculate the average training and validation loss
 	avgTrainLoss = totalTrainLoss / trainSteps
 	avgValLoss = totalValLoss / valSteps
-	# calculate the training and validation accuracy
-	trainCorrect = trainCorrect / len(trainDS)
-	valCorrect = valCorrect / len(testDS)
+
 	# update our training history
 	H["total_train_loss"].append(avgTrainLoss.cpu().detach().numpy())
 	# H["train_class_acc"].append(trainCorrect)

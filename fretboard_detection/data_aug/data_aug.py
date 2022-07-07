@@ -118,6 +118,7 @@ class RandomScale(object):
 		else:
 			assert self.scale > 0, "Please input a positive float"
 			self.scale = (max(-1, -self.scale), self.scale)
+			# self.scale = (max(-1, -self.scale), 0) # __gbastas__
 		
 		self.diff = diff
 
