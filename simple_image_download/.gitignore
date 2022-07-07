@@ -1,4 +1,0 @@
-dist
-dist/*
-build
-*.egg-info
