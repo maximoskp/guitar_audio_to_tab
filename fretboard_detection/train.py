@@ -24,7 +24,8 @@ import os
 import random
 from data_aug import data_aug
 import imutils
-
+import warnings
+warnings.filterwarnings("ignore")
 
 def write_image_with_bbox(orig, bbox): #[0,255]
 
@@ -48,19 +49,6 @@ def write_image_with_bbox(orig, bbox): #[0,255]
 	cv2.imwrite('check.jpeg', 255*orig)	
 
 
-# def from_yolo_to_standard(bboxes):
-# 	bboxes[:,0] = bboxes[:,0] - bboxes[:,2]/2
-# 	bboxes[:,1] = bboxes[:,1]- bboxes[:,3]/2
-# 	bboxes[:,2] = bboxes[:,0]+ bboxes[:,2]/2
-# 	bboxes[:,3] = bboxes[:,1]+ bboxes[:,3]/2
-# 	return bboxes
-
-# def from_standard_to_yolo(bboxes):
-# 	bboxes[:,0] = (bboxes[:,0] + bboxes[:,2])/2
-# 	bboxes[:,1] = (bboxes[:,1] + bboxes[:,3])/2
-# 	bboxes[:,2] = bboxes[:,2] - bboxes[:,0]
-# 	bboxes[:,3] = bboxes[:,3] - bboxes[:,1]
-# 	return bboxes
 
 # https://blog.paperspace.com/data-augmentation-for-object-detection-building-input-pipelines/
 class Sequence(object):
@@ -177,15 +165,31 @@ transforms = transforms.Compose([
 ])
 
 # augment_transforms = Sequence([data_aug.RandomScale(0.4, diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
-augment_transforms = Sequence([data_aug.RandomScale((-0.4,0), diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+augment_rescale = Sequence([data_aug.RandomScale((-0.4,0), diff = False)])
+# augment_crop = Sequence([data_aug.RandomScale((0,0.4), diff = False)])#, transforms.RandomScale(0.2, diff = True), transforms.RandomRotate(10)]))
+# augment_rotate = Sequence([data_aug.RandomRotate(10)])
+# augment_shear = Sequence([data_aug.RandomShear()])
+augment_hsv = Sequence([data_aug.RandomHSV(hue=(-80,80), saturation=(-80,80), brightness=(-80,80)), data_aug.RandomScale((0,0.4), diff = False)])
 
 # convert NumPy arrays to PyTorch datasets
 trainDS = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
 	transforms=transforms)#, augment_transforms=augment_transforms)
-trainDS_trans = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
-	transforms=transforms, augment_transforms=augment_transforms)
+trainDS_rescaled = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+	transforms=transforms, augment_transforms=augment_rescale)
+# trainDS_cropped = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+# 	transforms=transforms, augment_transforms=augment_crop)	
+# trainDS_rotate = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+# 	transforms=transforms, augment_transforms=augment_rotate)
+# trainDS_shear = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+# 	transforms=transforms, augment_transforms=augment_shear)
+trainDS_hsv = CustomTensorDataset((trainImages, trainLabels, trainBBoxes),
+	transforms=transforms, augment_transforms=augment_hsv)
 
-trainDS = ConcatDataset([trainDS, trainDS_trans])
+trainDS = ConcatDataset([trainDS, trainDS_rescaled])
+# trainDS = ConcatDataset([trainDS, trainDS_cropped])
+# trainDS = ConcatDataset([trainDS, trainDS_rotate])
+# trainDS = ConcatDataset([trainDS, trainDS_shear])
+trainDS = ConcatDataset([trainDS, trainDS_hsv])
 
 testDS = CustomTensorDataset((testImages, testLabels, testBBoxes),
 	transforms=transforms)
@@ -207,6 +211,7 @@ f = open(config.TEST_PATHS, "w")
 f.write("\n".join(testPaths))
 f.close()
 resnet = resnet50(pretrained=True)
+# resnet = resnet50(pretrained=False)
 
 for param in resnet.parameters():
 	# param.requires_grad = False
@@ -239,30 +244,9 @@ for e in tqdm(range(config.NUM_EPOCHS)):
 	# loop over the training set
 	for (images, labels, bboxes) in trainLoader:
 		if totalTrainLoss==0:
-			# print(np.array(images[0]).transpose(1,2,0).shape)
 			orig = np.array(images[0]).transpose(1,2,0)
 			write_image_with_bbox(orig, bboxes[0])
-			# (centerX, centerY, widthX, heightY) = bboxes[0]
-			# (startX, startY, endX, endY) = (centerX - widthX/2, centerY - heightY/2, centerX + widthX/2, centerY + heightY/2)
 
-			# orig = imutils.resize(orig, width=600)
-			# (h, w) = orig.shape[:2]
-
-			# startX = int(startX * w)
-			# startY = int(startY * h)
-			# endX = int(endX * w)
-			# endY = int(endY * h)
-			# y = startY - 10 if startY - 10 > 10 else startY + 10
-			# cv2.putText(orig, 'neck', (startX, y), cv2.FONT_HERSHEY_SIMPLEX,
-			# 	0.65, (0, 255, 0), 2)
-			# cv2.rectangle(orig, (startX, startY), (endX, endY),
-			# 	(0, 255, 0), 2)
-			# orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
-			# cv2.imwrite('check.jpeg', 255*orig)
-
-
-			# img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-			# cv2.imwrite('check.jpeg', 255*img)
 		# send the input to the device
 		(images, labels, bboxes) = (images.to(config.DEVICE), labels.to(config.DEVICE), bboxes.to(config.DEVICE))
 		# perform a forward pass and calculate the training loss

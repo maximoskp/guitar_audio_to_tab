@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 import cv2
-
+import imutils
 
 def write_image_with_bbox(orig, bbox): #[0,255]
 
@@ -26,7 +26,7 @@ def write_image_with_bbox(orig, bbox): #[0,255]
 	cv2.rectangle(orig, (startX, startY), (endX, endY),
 		(0, 255, 0), 2)
 	orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
-	cv2.imwrite('check.jpeg', 255*orig)	
+	cv2.imwrite('error.jpeg', 255*orig)	
 
 
 class CustomTensorDataset(Dataset):
@@ -49,18 +49,26 @@ class CustomTensorDataset(Dataset):
 			bbox = self.from_yolo_to_standard(bbox)
 			# print(np.array(image), np.array(bbox))
 			image, bbox = self.augment_transforms(255*np.array(image), np.array(bbox[None,:]))
+			# image, bbox = self.augment_transforms(np.array(image), np.array(bbox[None,:]))
 		
 			# [gb] sometimes augmentation fails and we just keep the standard training sample
 			try:
 				image = torch.tensor(image)
 				bbox = torch.tensor(bbox[0])
 				bbox = self.from_standard_to_yolo(bbox)
-			except IndexError as e:
-				print(e)
+			except (IndexError, RuntimeError) as e:
+				# print(str(e) + ', [gb] None set on purpose to discard bad annos')
 				image = image_prev
+				# if bbox!=None:
+				# 	bbox = self.from_standard_to_yolo(bbox[0])  # todisplay
+				# 	orig = np.array(image) # todisplay
+				# 	write_image_with_bbox(orig, bbox)
 				bbox = bbox_prev
-				# write_image_with_bbox(image, bbox)
+			# if image==None: # returned None if cropped bbox
+			# 	image = image_prev
+			# 	bbox = bbox_prev
 
+			# print(bbox)
 			
 		# transpose the image such that its channel dimension becomes
 		# the leading one

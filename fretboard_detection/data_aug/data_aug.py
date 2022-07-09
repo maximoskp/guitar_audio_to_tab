@@ -126,7 +126,7 @@ class RandomScale(object):
 
 	def __call__(self, img, bboxes):
 	
-		
+
 		#Chose a random digit to scale by 
 		
 		img_shape = img.shape
@@ -154,10 +154,29 @@ class RandomScale(object):
 		y_lim = int(min(resize_scale_y,1)*img_shape[0])
 		x_lim = int(min(resize_scale_x,1)*img_shape[1])
 		
-		
+		# __gbastas__
+		if bboxes[0,2] > x_lim:
+			print('AAAAAAAAA')
+			return None, None
+		if bboxes[0,3] > y_lim:
+			print('BBBBBBBBB')
+			return None, None
+
 		canvas[:y_lim,:x_lim,:] =  img[:y_lim,:x_lim,:]
 		
 		img = canvas
+
+		# __gbastas__
+		if bboxes[0,2] > 1:
+			return None, None
+		if bboxes[0,3] > 1:
+			return None, None		
+		if bboxes[0,2]-bboxes[0,0] <0.07 and bboxes[0,3]-bboxes[0,1] <0.07: # wrong bbox (very small)
+			return None, bboxes	
+
+
+		# __gbastas__
+
 		bboxes = clip_box(bboxes, [0,0,1 + img_shape[1], img_shape[0]], 0.25)
 	
 	

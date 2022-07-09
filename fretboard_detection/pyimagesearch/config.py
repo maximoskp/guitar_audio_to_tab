@@ -24,14 +24,15 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PIN_MEMORY = True if DEVICE == "cuda" else False
 
 # TODO: for my dataset (may change overtime)
-MEAN = [0.3469, 0.3043, 0.2974]
-STD = [0.3204, 0.3003, 0.2957]
-
+# MEAN = [0.3469, 0.3043, 0.2974]
+# STD = [0.3204, 0.3003, 0.2957]
+MEAN = [0.3649, 0.3242, 0.3095]
+STD = [0.3182, 0.3016, 0.2971]
 # initialize our initial learning rate, number of epochs to train
 # for, and the batch size
 INIT_LR = 1e-4
-NUM_EPOCHS = 250
-BATCH_SIZE = 8
+NUM_EPOCHS = 100
+BATCH_SIZE = 4
 
 # specify the loss weights
 # LABELS = 1.0
