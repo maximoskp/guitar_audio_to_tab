@@ -22,7 +22,7 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 	if valid_pb is None or valid_pn is None:
 		valid_pb, valid_pn = pb, pn
 
-	if np.linalg.norm(pb - pn) > 0.1:
+	if np.linalg.norm(pb - pn) > 0.05:
 		valid_pb, valid_pn = np.copy(pb), np.copy(pn)
 		valid_Iout = I_out * 255
 		valid_Iout = valid_Iout[:, ::-1]
@@ -33,6 +33,7 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 
 	# Flip the image horizontally for a later selfie-view display, and convert the BGR image to RGB.
 	image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+	# image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 	# To improve performance, optionally mark the image as not writeable to pass by reference.
 	image.flags.writeable = False
 	results = hands.process(image)
@@ -51,15 +52,18 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 		if pinky_tip_x is not None and pinky_tip_y is not None:
 			pinky_tip = np.array([pinky_tip_x, 1-pinky_tip_y])
 			neck_vector = (valid_pb - valid_pn)
-			
+
 			rel_dist_from_nut = np.linalg.norm(pinky_tip-valid_pn)/np.linalg.norm(neck_vector)
 
-			if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
+			print(rel_dist_from_nut)
+
+			# if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
+			if rel_dist_from_nut<=1.0:
 				prev_rel_dist_from_nut = rel_dist_from_nut
 
-			for hand_landmarks in results.multi_hand_landmarks:
-					mp_drawing.draw_landmarks(
-							image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+		for hand_landmarks in results.multi_hand_landmarks:
+				mp_drawing.draw_landmarks(
+						image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
 	currTime = time.time()
 	fps = 1 / (currTime - prevTime)
@@ -136,6 +140,8 @@ def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # 
 
 	(centerX, centerY, widthX, heightY) = boxPreds[0]
 	(startX, startY, endX, endY) = (centerX - widthX/2, centerY - heightY/2, centerX + widthX/2, centerY + heightY/2)
+	(bodyX, bodyY, nutX, nutY) = (centerX - widthX/2, centerY + heightY/2, centerX + widthX/2, centerY - heightY/2)
+	(bodyX, bodyY, nutX, nutY) = (1-bodyX.detach(), 1-bodyY.detach(), 1-nutX.detach(), 1-nutY.detach())
 
 	orig = imutils.resize(orig, width=600)
 	(h, w) = orig.shape[:2]
@@ -150,7 +156,7 @@ def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # 
 	cv2.rectangle(orig, (startX, startY), (endX, endY),
 		(0, 255, 0), 2)
 	# I_bboxd = 255*orig    
-	return orig
+	return orig, np.array([bodyX, bodyY]), np.array([nutX, nutY])
 
 def learn_params():
 	Mrk = cv2.imread('marker_samples4.png')
@@ -196,10 +202,20 @@ if __name__ == "__main__":
 				continue
 
 			# image = image/255
-			image = get_bbox(image)
-			cv2.imshow('MediaPipe Hands', image )
-			if cv2.waitKey(5) & 0xFF == 27:
-				break
+			image, pb, pn = get_bbox(image)
+			I_out = np.zeros(image.shape)
+			image, pinky_pos, valid_Iout, valid_pb, valid_pn = compute_pinky_rel_position(image, np.zeros(image.shape), pb, pn, pinky_pos, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
+
+			# print(pb, pn)
+			print(pinky_pos)
+
+			pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
+			pinky_fret = min(pinky_fret, 24) 
+			pinky_fret = max(pinky_fret, 0)
+			pinky_binary[pinky_fret] = 1
+
+			image = cv2.flip(image, 1)
+			cv2.putText(image, f'Pinky Pos: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
 
 
 			# Ipr, I_out, pb, pn = get_markers(image, mu, cov, threshold=threshold/100)
@@ -221,9 +237,9 @@ if __name__ == "__main__":
 			# 		image[:, :, 2] = np.maximum(image[:, :, 2], valid_Iout)
 			# 		image = cv2.circle(image, (int(valid_pb[0]*width), int((1-valid_pb[1])*height)), 5, (255, 0, 0), 2)
 			# 		image = cv2.circle(image, (int(valid_pn[0]*width), int((1-valid_pn[1])*height)), 5, (255, 0, 0), 2)
-			# 		cv2.imshow('MediaPipe Hands', image )
-			# if cv2.waitKey(5) & 0xFF == 27:
-			# 	break
+			cv2.imshow('MediaPipe Hands', image )
+			if cv2.waitKey(5) & 0xFF == 27:
+				break
 
 	cap.release()
 	# Learn more AI in Computer Vision by Enrolling in our AI_CV Nano Degree:
