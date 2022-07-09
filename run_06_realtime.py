@@ -92,20 +92,11 @@ output1 = p.open(format=pyaudio.paInt16,
                 frames_per_buffer=WINDOW_SIZE,
                 stream_callback=callback)
 
-# if device_2_index >= 0:
-#     output2 = p.open(format=pyaudio.paInt16,
-#                     channels=CHANNELS,
-#                     rate=RATE,
-#                     output=True,
-#                     input=True,
-#                     input_device_index=device_2_index,
-#                     frames_per_buffer=WINDOW_SIZE,
-#                     stream_callback=callback)
+
 
 
 output1.start_stream()
-#if device_2_index >= 0:
-#    output2.start_stream()
+
 
 threaded_input = Thread( target=user_input_function )
 threaded_input.start()
@@ -138,7 +129,6 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
 
         pinky_binary = np.zeros(25)
         
-
         if not success:
             print("Ignoring empty camera frame.")
             continue
@@ -146,7 +136,8 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         Ipr, I_out, pb, pn = Hands_lib.get_markers(image, mu, cov, threshold=0.15)
         if (pb is not None and pn is not None):
             image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, I_out, pb, pn, pinky_pos, prevTime, 
-                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
+                                                                                                    valid_pb, valid_pn, valid_Iout, pinky_tip_x, 
+                                                                                                    pinky_tip_y, hands, mp_drawing, mp_hands)
 
             pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
             pinky_fret = min(pinky_fret, 24) 
@@ -173,8 +164,7 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         if np.max( np.abs( bb ) ) > 0.05:
             bb = bb/np.max( np.abs( bb ) )
 
-        # print(np.reshape( bb, (1,1600,1) ).shape)    
-        # print(pinky_binary.shape)
+
         y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(pinky_binary, (1,25,1) )] ] )
         plt.clf()
         plt.subplot(2,1,1)
@@ -185,7 +175,6 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
         plt.subplot(2,1,2)
         plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
         plt.title('output')
-        # plt.imshow( spec_img[ WINDOW_SIZE//4: , : ] , aspect='auto' )
         plt.show()
         plt.pause(0.01)
 
@@ -194,5 +183,4 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
 
 print('stopping audio')
 output1.stop_stream()
-# if device_2_index >= 0:
-#     output2.stop_stream()
+
