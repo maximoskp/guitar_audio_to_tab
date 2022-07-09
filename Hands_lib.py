@@ -107,7 +107,7 @@ def get_markers(I, mu, cov, threshold=None):
 
 def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
 	print("[INFO] loading object detector...")
-	MODEL_PATH = os.path.join('./fretboard_detection', 'output', 'detector.pth')
+	MODEL_PATH = os.path.join('./fretboard_detection', 'output', 'detector_good.pth')
 	print('config.DEVICE', config.DEVICE)
 	
 	print('MODEL_PATH', MODEL_PATH)
