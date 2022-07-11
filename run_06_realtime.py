@@ -22,6 +22,24 @@ import math
 # pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils
 # conda install -c anaconda pyaudio
 
+def make_hand_box(highest_fret):
+    handbox = np.zeros(25)
+    handbox[highest_fret] = 1
+    if highest_fret-1 >= 0:
+        handbox[highest_fret-1] = 1
+    if highest_fret-2 >= 0:
+        handbox[highest_fret-2] = 1
+    if highest_fret+1 <= 24:
+        handbox[highest_fret+1] = 0.5
+    if highest_fret+2 <= 24:
+        handbox[highest_fret+2] = 0.25
+    if highest_fret-3 <= 24:
+        handbox[highest_fret-3] = 0.5
+    if highest_fret-4 <= 24:
+        handbox[highest_fret-4] = 0.25
+    return handbox
+# end make_hand_box
+
 # load model
 model = keras.models.load_model( 'models/hand/tab_hand_full_CNN_out_current_best.hdf5' )
 
@@ -142,7 +160,7 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
             pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
             pinky_fret = min(pinky_fret, 24) 
             pinky_fret = max(pinky_fret, 0)
-            pinky_binary[pinky_fret] = 1
+            hand_position = make_hand_box( pinky_fret )
 
             print('pinky_fret:',pinky_fret)
 
@@ -165,7 +183,7 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
             bb = bb/np.max( np.abs( bb ) )
 
 
-        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(pinky_binary, (1,25,1) )] ] )
+        y_pred = model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(hand_position, (1,25,1) )] ] )
         plt.clf()
         plt.subplot(2,1,1)
         plt.plot( bb )

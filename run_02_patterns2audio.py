@@ -38,11 +38,29 @@ sr = g.constants.sample_rate
 
 dataset = []
 
+def make_hand_box(highest_fret):
+    handbox = np.zeros(25)
+    handbox[highest_fret] = 1
+    if highest_fret-1 >= 0:
+        handbox[highest_fret-1] = 1
+    if highest_fret-2 >= 0:
+        handbox[highest_fret-2] = 1
+    if highest_fret+1 <= 24:
+        handbox[highest_fret+1] = 0.5
+    if highest_fret+2 <= 24:
+        handbox[highest_fret+2] = 0.25
+    if highest_fret-3 <= 24:
+        handbox[highest_fret-3] = 0.5
+    if highest_fret-4 <= 24:
+        handbox[highest_fret-4] = 0.25
+    return handbox
+# end make_hand_box
+
 # keep top_k
-top_k = 3000
+top_k = 4000
 # sample duration in samples
 samples2keep = sr//10
-samplesstep = samples2keep//2
+samplesstep = samples2keep//4
 segments2keep = 5
 for i in range(top_k):
     print('pattern: ' + str(i) + '/' + str(top_k))
@@ -59,8 +77,22 @@ for i in range(top_k):
             print('non-rollable')
         if rollable:
             highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
-            hand = np.zeros(25)
-            hand[highest_fret] = 1
+            open_stings = False
+            if highest_fret == 0:
+                open_stings = True
+                hand = make_hand_box(2+np.random.randint(10))
+            else:
+                hand = make_hand_box(highest_fret)
+            # hand = np.zeros(25)
+            # hand[highest_fret] = 1
+            # if highest_fret-1 >= 0:
+            #     hand[highest_fret-1] = 0.5
+            # if highest_fret-2 >= 0:
+            #     hand[highest_fret-2] = 0.25
+            # if highest_fret+1 <= 24:
+            #     hand[highest_fret+1] = 0.5
+            # if highest_fret+2 <= 24:
+            #     hand[highest_fret+2] = 0.25
             while highest_fret < 24:
                 s = np.zeros(sr)
                 for string in range(6):
@@ -73,18 +105,42 @@ for i in range(top_k):
                     tmp_s = s[ii:ii+samples2keep]
                     if np.max( np.abs( tmp_s ) ) > 0.05:
                         tmp_s = tmp_s/np.max( np.abs( tmp_s ) )
-                    sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool), 'hand': hand.astype(np.bool)}
-                    dataset.append( sample )
+                    if open_stings:
+                        for iji in range(10):
+                            hand = make_hand_box(2+np.random.randint(10))
+                            sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool), 'hand': hand.astype(np.bool)}
+                            dataset.append( sample )
+                    else:
+                        sample = {'audio': tmp_s.astype(np.float32), 'tab': p.astype(np.bool), 'hand': hand.astype(np.bool)}
+                        dataset.append( sample )
                     ii += samplesstep
                 p = np.roll( p , [0,1] )
                 highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
-                hand = np.zeros(25)
-                hand[highest_fret] = 1
+                hand = make_hand_box(highest_fret)
+                # hand = np.zeros(25)
+                # hand[highest_fret] = 1
+                # if highest_fret-1 >= 0:
+                #     hand[highest_fret-1] = 0.5
+                # if highest_fret-2 >= 0:
+                #     hand[highest_fret-2] = 0.25
+                # if highest_fret+1 <= 24:
+                #     hand[highest_fret+1] = 0.5
+                # if highest_fret+2 <= 24:
+                #     hand[highest_fret+2] = 0.25
             # end while
         else:
             highest_fret = np.where( np.sum( p, axis=0 ) > 0 )[0][-1]
             hand = np.zeros(25)
-            hand[highest_fret] = 1
+            hand = make_hand_box(highest_fret)
+            # hand[highest_fret] = 1
+            # if highest_fret-1 >= 0:
+            #     hand[highest_fret-1] = 0.5
+            # if highest_fret-2 >= 0:
+            #     hand[highest_fret-2] = 0.25
+            # if highest_fret+1 <= 24:
+            #     hand[highest_fret+1] = 0.5
+            # if highest_fret+2 <= 24:
+            #     hand[highest_fret+2] = 0.25
             s = np.zeros(sr)
             for string in range(6):
                 if np.sum(p[string,:]) > 0:

@@ -66,7 +66,7 @@ input_audio_shape = [x_audio_train[0].size,1]
 # input_hand_shape = [x_hand_train[0].size,1]
 input_hand_shape = x_hand_train[0].size
 
-latent_size = 6*32
+latent_size = 6*64
 
 # # create the model
 # encoder = keras.models.Sequential()
@@ -127,7 +127,7 @@ combined = keras.layers.concatenate([ audio_encoder.outputs[0], hand_dense.outpu
 latent = keras.layers.Dense(latent_size, activation='relu')(combined)
 latent = keras.layers.Dropout(0.3)(latent)
 latent = keras.layers.BatchNormalization()(latent)
-latent = keras.layers.Dense(latent_size, activation='relu')(latent)
+latent = keras.layers.Dense(2*latent_size, activation='relu')(latent)
 latent = keras.layers.Dropout(0.3)(latent)
 latent = keras.layers.BatchNormalization()(latent)
 latent = keras.layers.Dense(latent_size, activation='relu')(latent)
