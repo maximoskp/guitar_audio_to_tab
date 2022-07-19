@@ -104,7 +104,7 @@ p = pyaudio.PyAudio()
 
 output1 = p.open(format=pyaudio.paInt16,
 				channels=CHANNELS,
-				rate=16000,
+				rate=RATE,
 				output=True,
 				input=True,
 				input_device_index=device_1_index,
