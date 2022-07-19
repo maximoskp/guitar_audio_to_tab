@@ -164,6 +164,7 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
 			pinky_fret = min(pinky_fret, 24) 
 			pinky_fret = max(pinky_fret, 0)
 			pinky_binary[pinky_fret] = 1
+			hand_position = make_hand_box( pinky_fret )
 
 			image = cv2.flip(image, 1)
 			cv2.putText(image, f'Pinky Pos: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
