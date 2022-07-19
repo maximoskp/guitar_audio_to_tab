@@ -1,7 +1,7 @@
 # https://medium.com/augmented-startups/hand-tracking-30-fps-on-cpu-in-5-minutes-986a749709d7
 
 # conda create --name cv python=3.7
-# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy
+# pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy pickle5
 
 import cv2
 import mediapipe as mp
