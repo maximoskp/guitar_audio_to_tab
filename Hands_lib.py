@@ -116,7 +116,7 @@ def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # 
 	
 	print('MODEL_PATH', MODEL_PATH)
 	# model = torch.load(MODEL_PATH).to(config.DEVICE)
-	model = torch.load(MODEL_PATH, map_location=torch.device('cpu'))
+	model = torch.load(MODEL_PATH, map_location=torch.device(config.DEVICE))
 	model.eval()
 	transforms_ = transforms.Compose([
 		transforms.ToPILImage(),
@@ -132,7 +132,7 @@ def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # 
 	image = cv2.resize(image, (224, 224))
 	image = image.transpose((2, 0, 1))
 	image = torch.from_numpy(image)
-	image = transforms_(image).to('cpu')
+	image = transforms_(image).to(config.DEVICE)
 	image = image.unsqueeze(0)
 
 	# predict the bounding box of the fretboard
