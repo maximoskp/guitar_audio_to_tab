@@ -110,11 +110,11 @@ def get_markers(I, mu, cov, threshold=None):
 		return Ipr, Icls, None, None
 
 def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
-	print("[INFO] loading object detector...")
+	# print("[INFO] loading object detector...")
 	MODEL_PATH = os.path.join('./fretboard_detection', 'output', 'detector_good.pth')
-	print('config.DEVICE', config.DEVICE)
+	# print('config.DEVICE', config.DEVICE)
 	
-	print('MODEL_PATH', MODEL_PATH)
+	# print('MODEL_PATH', MODEL_PATH)
 	# model = torch.load(MODEL_PATH).to(config.DEVICE)
 	model = torch.load(MODEL_PATH, map_location=torch.device(config.DEVICE))
 	model.eval()
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 			image, pinky_pos, valid_Iout, valid_pb, valid_pn = compute_pinky_rel_position(image, np.zeros(image.shape), pb, pn, pinky_pos, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
 
 			# print(pb, pn)
-			print(pinky_pos)
+			# print(pinky_pos)
 
 			pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
 			pinky_fret = min(pinky_fret, 24) 

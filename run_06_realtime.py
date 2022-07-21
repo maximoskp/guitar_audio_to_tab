@@ -140,7 +140,7 @@ valid_Iout, valid_pb, valid_pn = None, None, None
 # interactive matplotlib mode
 plt.ion()
 # after starting, check when n empties (file ends) and stop
-with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.5) as hands:
 
 	while output1.is_active() and not user_terminated and cap.isOpened():
 
@@ -157,9 +157,10 @@ with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) a
 
 		if args.nn:
 			image, pb, pn = Hands_lib.get_bbox(image)
+			# pb, pn = np.array([0,0]), np.array([0,0])
 			I_out = np.zeros(image.shape)
 			image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, np.zeros(image.shape), pb, pn, pinky_pos, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
-
+			# pinky_pos=0.3
 			pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
 			pinky_fret = min(pinky_fret, 24) 
 			pinky_fret = max(pinky_fret, 0)
