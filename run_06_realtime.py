@@ -126,8 +126,9 @@ parser.add_argument('-nn', action='store_true', help='use neural nets for fretbo
 args = parser.parse_args()
 c = 1.059463
 C = 1/c**24
-L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula,  by setting LO = 1 + L24 [https://www.omnicalculator.com/other/fret]
-L0 = 1 + L24
+# Lₙ is the length of the string from any fret "n" to the bridge
+L24 = C / (1-C) # this is derived from Ln = L0/c**n standard formula, by setting LO = 1 + L24 assuming neck-length to be 1 [https://www.omnicalculator.com/other/fret]
+L0 = 1 + L24 # L0 is the distance from nut to bridge
 mu, cov = Hands_lib.learn_params()
 cov_init = np.copy(cov)
 mp_drawing = mp.solutions.drawing_utils

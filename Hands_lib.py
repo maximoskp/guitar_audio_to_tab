@@ -55,7 +55,7 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 
 			rel_dist_from_nut = np.linalg.norm(pinky_tip-valid_pn)/np.linalg.norm(neck_vector)
 
-			print(rel_dist_from_nut)
+			# print(rel_dist_from_nut)
 
 			# if abs(rel_dist_from_nut - prev_rel_dist_from_nut) <0.6 and rel_dist_from_nut<=1.0:
 			if rel_dist_from_nut<=1.0:
@@ -65,9 +65,9 @@ def compute_pinky_rel_position(image, I_out, pb, pn, prev_rel_dist_from_nut, pre
 				mp_drawing.draw_landmarks(
 						image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-	currTime = time.time()
-	fps = 1 / (currTime - prevTime)
-	prevTime = currTime
+	# currTime = time.time()
+	# fps = 1 / (currTime - prevTime)
+	# prevTime = currTime
 	return image, round(prev_rel_dist_from_nut,2), valid_Iout, valid_pb, valid_pn
 
 
@@ -109,12 +109,8 @@ def get_markers(I, mu, cov, threshold=None):
 	except ValueError as e:
 		return Ipr, Icls, None, None
 
-def get_bbox(image): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
-	# print("[INFO] loading object detector...")
-	MODEL_PATH = os.path.join('./fretboard_detection', 'output', 'detector_good.pth')
-	# print('config.DEVICE', config.DEVICE)
-	
-	# print('MODEL_PATH', MODEL_PATH)
+def get_bbox(image, model_filename='detector_good.pth'): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
+	MODEL_PATH = os.path.join('./fretboard_detection', 'output', model_filename)
 	# model = torch.load(MODEL_PATH).to(config.DEVICE)
 	model = torch.load(MODEL_PATH, map_location=torch.device(config.DEVICE))
 	model.eval()
