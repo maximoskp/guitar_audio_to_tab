@@ -5,7 +5,7 @@
 ```
 conda create --name av-guit python=3.7
 conda activate av-guit
-pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils
+pip install opencv-python mediapipe matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils protobuf==3.20.*
 conda install -c anaconda pyaudio
 ln -s ./fretboard_detection/pyimagesearch ./pyimagesearch
 ```
