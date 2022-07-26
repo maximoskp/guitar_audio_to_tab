@@ -229,7 +229,7 @@ def start_AVprocessing():
 	video_thread = VideoProcessor()
 	audio_thread = AudioProcessor()    
 	audio_thread.start()
-	# video_thread.start()
+	video_thread.start()
 
 if __name__ == '__main__':
 	hand_position = np.zeros(25)
