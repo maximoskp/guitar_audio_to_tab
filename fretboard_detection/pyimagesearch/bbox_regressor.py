@@ -21,7 +21,8 @@ class ObjectDetector(Module):
 		# build the regressor head for outputting the bounding box
 		# coordinates
 		self.regressor = Sequential(
-			Linear(baseModel.fc.in_features, 128),
+			# Linear(baseModel.fc.in_features, 128), # this is for ResNet
+			Linear(baseModel.last_channel, 128), # this is for MobileNet
 			ReLU(),
 			Linear(128, 64),
 			ReLU(),
@@ -32,19 +33,21 @@ class ObjectDetector(Module):
 		)
 
 	   # build the classifier head to predict the class labels
-		self.classifier = Sequential(
-			Linear(baseModel.fc.in_features, 512),
-			ReLU(),
-			Dropout(),
-			Linear(512, 512),
-			ReLU(),
-			Dropout(),
-			Linear(512, self.numClasses)
-		)
-
+		# self.classifier = Sequential(
+		# 	Linear(baseModel.fc.in_features, 512),
+		# 	# Linear(baseModel.last_channel, 128),
+		# 	ReLU(),
+		# 	Dropout(),
+		# 	Linear(512, 512),
+		# 	ReLU(),
+		# 	Dropout(),
+		# 	Linear(512, self.numClasses)
+		# )
 		# set the classifier of our base model to produce outputs
 		# from the last convolution block
-		self.baseModel.fc = Identity()
+		self.baseModel.fc = Identity()  # this is for ResNet
+		self.baseModel.classifier = Identity() # this is for MobileNet
+
 
 	def forward(self, x):
 			# pass the inputs through the base model and then obtain

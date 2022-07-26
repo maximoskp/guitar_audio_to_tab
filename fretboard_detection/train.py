@@ -10,7 +10,7 @@ from torchvision import transforms
 from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
 from torch.optim import Adam
-from torchvision.models import resnet50, mobilenet_v3_small
+from torchvision.models import resnet18, resnet50, mobilenet_v2
 from sklearn.model_selection import train_test_split
 from imutils import paths
 from tqdm import tqdm
@@ -210,7 +210,10 @@ print("[INFO] saving testing image paths...")
 f = open(config.TEST_PATHS, "w")
 f.write("\n".join(testPaths))
 f.close()
-resnet = resnet50(pretrained=True)
+
+resnet = mobilenet_v2(pretrained=True)
+# resnet = resnet18(pretrained=True)
+# resnet = resnet50(pretrained=True)
 # resnet = resnet50(pretrained=False)
 
 for param in resnet.parameters():
