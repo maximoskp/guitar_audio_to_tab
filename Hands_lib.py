@@ -109,7 +109,7 @@ def get_markers(I, mu, cov, threshold=None):
 	except ValueError as e:
 		return Ipr, Icls, None, None
 
-def get_bbox(image, model_filename='detector_good.pth'): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
+def get_bbox(image, model_filename='detector_good18.pth'): # image = cv2.imread(imagePath).astype(np.float32) / 255 # NOTE: range [0,1]
 	MODEL_PATH = os.path.join('./fretboard_detection', 'output', model_filename)
 	# model = torch.load(MODEL_PATH).to(config.DEVICE)
 	model = torch.load(MODEL_PATH, map_location=torch.device(config.DEVICE))

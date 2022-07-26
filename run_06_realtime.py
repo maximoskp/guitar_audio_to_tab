@@ -56,6 +56,18 @@ for i in range(p.get_device_count()):
 	if 'Mic/Line In 3/4 (Studio 18' in d['name'] and d['hostApi'] == 0:
 		device_2_index = d['index']
 
+# print('[gb] initialize pyAudio:', p.get_device_count(), flush=True)
+# device_index = 0
+# for i in range(device_index, p.get_device_count()):
+# 	d = p.get_device_info_by_index(i)
+# 	if p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels') > 0 and p.get_device_info_by_host_api_device_index(0, i).get('maxOutputChannels') == 0:
+# 		print()
+# 		print('[gb] *** Chosen output device:', d, flush=True)
+# 		print()
+# 		device_index = d['index']
+# 		break
+
+
 
 WINDOW_SIZE = 2048
 CHANNELS = 1
@@ -159,7 +171,6 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.5) a
 		if args.nn:
 			image, pb, pn = Hands_lib.get_bbox(image)
 			# pb, pn = np.array([0,0]), np.array([0,0])
-			I_out = np.zeros(image.shape)
 			image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, np.zeros(image.shape), pb, pn, pinky_pos, prevTime, valid_pb, valid_pn, valid_Iout, pinky_tip_x, pinky_tip_y, hands, mp_drawing, mp_hands)
 			# pinky_pos=0.3
 			pinky_fret = int( math.log(L0/(L0-pinky_pos), c) )  # this is derived from formula dist_from_nut = Lo - (L0 / c**n) [https://www.omnicalculator.com/other/fret]
