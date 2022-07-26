@@ -10,7 +10,7 @@ from torchvision import transforms
 from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
 from torch.optim import Adam
-from torchvision.models import resnet50
+from torchvision.models import resnet50, mobilenet_v3_small
 from sklearn.model_selection import train_test_split
 from imutils import paths
 from tqdm import tqdm

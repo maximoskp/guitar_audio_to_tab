@@ -1,6 +1,6 @@
 `<!-- https://pyimagesearch.com/2021/11/01/training-an-object-detector-from-scratch-in-pytorch/?utm_source=pocket_mylist -->
 
-## Move data where they should be
+## Move data where they should be (if not there)
 mkdir -p dataset/images/neck/
 mkdir dataset/annotations
 cp ../simple_image_download/my_dir/dataset/*txt dataset/annotations/
