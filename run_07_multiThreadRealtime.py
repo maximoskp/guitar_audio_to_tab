@@ -8,7 +8,7 @@ from tensorflow import keras
 import pyaudio
 import numpy as np
 import matplotlib.pyplot as plt
-from time import sleep
+# from time import sleep
 from threading import Thread
 import copy
 import cv2
