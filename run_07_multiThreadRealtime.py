@@ -134,7 +134,6 @@ class AudioProcessor():
 			# except NameError:
 			# 	print("Not ready for image.")
 
-			print('AAAAA')
 			y_pred = self.model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(hand_position, (1,25,1) )] ] )
 			print('stream.is_active():', self.stream.is_active())
 			plt.clf()
@@ -191,9 +190,13 @@ class VideoProcessor():
 		valid_Iout, valid_pb, valid_pn = None, None, None  
 		pinky_pos=0
 		c = 1.059463
-		# plt.ion()
+		plt.ion()
 		pb, pn = np.array([0,0]), np.array([0,0])
+		model_filename = 'detector_good50.pth'
+		print('VISUAL MODEL:', model_filename)
+
 		with self.mp_hands.Hands(min_detection_confidence=0.3, min_tracking_confidence=0.5) as hands:
+
 			while self.cap.isOpened():
 				#### gbastas ####
 				success, image = self.cap.read()
@@ -202,7 +205,7 @@ class VideoProcessor():
 					print("Ignoring empty camera frame.")
 					continue
 
-				image, pb, pn = Hands_lib.get_bbox(image)
+				image, pb, pn = Hands_lib.get_bbox(image, model_filename=model_filename)
 				
 				image, pinky_pos, valid_Iout, valid_pb, valid_pn = Hands_lib.compute_pinky_rel_position(image, np.zeros(image.shape), pb, pn, pinky_pos, 0, 
 																										valid_pb, valid_pn, valid_Iout, None, None, 
@@ -213,23 +216,22 @@ class VideoProcessor():
 				hand_position = self.make_hand_box( pinky_fret )
 
 				final_image = cv2.flip(image, 1)
-				cv2.putText(image, f'Pinky Pos: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
-				cv2.imshow('MediaPipe Hands', final_image )
+				cv2.putText(final_image, f'Pinky Pos: {pinky_pos, pinky_fret}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 196, 255), 2)
+				cv2.imshow('MediaPipe Hands', final_image)
 				key = cv2.waitKey(1)
 				if key == 27:  # exit on ESC
 					break				
 
 	def start(self):
+		# print('AAAAA')
 		threaded_input = Thread( target=self.receive )
 		threaded_input.start()
 
 def start_AVprocessing():
-	# global video_thread
-	global audio_thread
 	video_thread = VideoProcessor()
 	audio_thread = AudioProcessor()    
-	audio_thread.start()
 	video_thread.start()
+	audio_thread.start()
 
 if __name__ == '__main__':
 	hand_position = np.zeros(25)

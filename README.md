@@ -9,11 +9,11 @@ Check REAMD.md in ```./freboard_detection```.
 ```
 conda create --name av-guit python=3.7
 conda activate av-guit
-pip install opencv-python mediapipe matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils protobuf==3.20.*
+pip install opencv-python mediapipe matplotlib scipy numpy cython PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils protobuf==3.20.*
 conda install -c anaconda pyaudio
 ```
 
-ln -s ./fretboard_detection/pyimagesearch ./pyimagesearch
+<!-- ln -s ./fretboard_detection/pyimagesearch ./pyimagesearch -->
 
 In Linux, you may also need to run: 
 ```
@@ -21,8 +21,6 @@ sudo apt-get install -y python-all-dev
 sudo apt-get install -y python3-pyaudio 
 apt-get install -y apulse
 apt-get install -y alsa-utils
-
-
 ```
 
 ## Download required files (NOTE: these might change -- written in 19/07/22)
@@ -33,4 +31,8 @@ apt-get install -y alsa-utils
 ## Run:
 ```
 python run_06_realtime.py -nn
+```
+or 
+```
+python run_07_multiThreadRealtime.py
 ```
