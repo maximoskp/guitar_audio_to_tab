@@ -82,29 +82,6 @@ class AudioProcessor():
 		return (b, pyaudio.paContinue)
 
 	# def receive(self):
-	# 	global hand_position
-	# 	self.stream.stop_stream() # for some reason I just need to stop it first...
-	# 	self.stream.start_stream()
-
-	# 	plt.ion() # interactive matplotlib mode
-	# 	print('stream.is_active():', self.stream.is_active())
-	# 	while self.stream.is_active():
-	# 		bb = copy.deepcopy( self.global_block[:1600] )
-	# 		if np.max( np.abs( bb ) ) > 0.05:
-	# 			bb = bb/np.max( np.abs( bb ) )
-
-	# 		y_pred = self.model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(hand_position, (1,25,1) )] ] )
-	# 		plt.clf()
-	# 		plt.subplot(2,1,1)
-	# 		plt.plot( bb )
-	# 		plt.ylim([-1,1])
-	# 		plt.xticks([])
-	# 		plt.title('input')
-	# 		plt.subplot(2,1,2)
-	# 		plt.imshow( y_pred[0,:,:] , cmap='gray_r' )
-	# 		plt.title('output')
-	# 		plt.show()
-	# 		plt.pause(0.01)
 
 	def user_input_function(self):
 		k = input('press "s" to terminate (then press "Enter"): ')
@@ -114,10 +91,10 @@ class AudioProcessor():
 
 	def start(self):
 		# threaded_input = Thread( target=self.receive )
-		# threaded_input = Thread( target=self.user_input_function )
-		# threaded_input.start()
+		threaded_input = Thread( target=self.user_input_function )
+		threaded_input.start()
 		
-		global hand_position, final_image
+		global hand_position, pinky_fret#, final_image
 		self.stream.stop_stream() # for some reason I just need to stop it first...
 		time.sleep(0.1)
 		self.stream.start_stream()
@@ -133,9 +110,13 @@ class AudioProcessor():
 			# 	cv2.imshow('MediaPipe Hands', final_image )
 			# except NameError:
 			# 	print("Not ready for image.")
+			# try:
+			# 	print('pinky_fret:', pinky_fret)
+			# except NameError:
+			# 	print("Not ready for image.")
 
 			y_pred = self.model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(hand_position, (1,25,1) )] ] )
-			print('stream.is_active():', self.stream.is_active())
+			# print('stream.is_active():', self.stream.is_active())
 			plt.clf()
 			plt.subplot(2,1,1)
 			plt.plot( bb )
@@ -186,13 +167,13 @@ class VideoProcessor():
 
 
 	def receive(self):
-		global hand_position, final_image
+		global hand_position, pinky_fret, final_image
 		valid_Iout, valid_pb, valid_pn = None, None, None  
 		pinky_pos=0
 		c = 1.059463
 		plt.ion()
 		pb, pn = np.array([0,0]), np.array([0,0])
-		model_filename = 'detector_good50.pth'
+		model_filename = 'detector_good18.pth'
 		print('VISUAL MODEL:', model_filename)
 
 		with self.mp_hands.Hands(min_detection_confidence=0.3, min_tracking_confidence=0.5) as hands:
@@ -223,7 +204,6 @@ class VideoProcessor():
 					break				
 
 	def start(self):
-		# print('AAAAA')
 		threaded_input = Thread( target=self.receive )
 		threaded_input.start()
 
