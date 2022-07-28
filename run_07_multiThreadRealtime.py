@@ -174,9 +174,10 @@ class VideoProcessor():
 		plt.ion()
 		pb, pn = np.array([0,0]), np.array([0,0])
 		model_filename = 'detector_good18.pth'
+		# model_filename = 'detector_good_mobilenetv2.pth' # TODO: not running yet
 		print('VISUAL MODEL:', model_filename)
 
-		with self.mp_hands.Hands(min_detection_confidence=0.3, min_tracking_confidence=0.5) as hands:
+		with self.mp_hands.Hands(min_detection_confidence=0.1, min_tracking_confidence=0.2) as hands:
 
 			while self.cap.isOpened():
 				#### gbastas ####
