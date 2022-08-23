@@ -1,7 +1,7 @@
 # guitar_audio_to_tab
 
 
-## Fretboard Visual Detection:
+## Fretboard Visual-Detection Training:
 Check REAMD.md in ```./freboard_detection```.
 
 

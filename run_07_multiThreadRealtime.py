@@ -106,15 +106,6 @@ class AudioProcessor():
 			if np.max( np.abs( bb ) ) > 0.05:
 				bb = bb/np.max( np.abs( bb ) )
 
-			# try:
-			# 	cv2.imshow('MediaPipe Hands', final_image )
-			# except NameError:
-			# 	print("Not ready for image.")
-			# try:
-			# 	print('pinky_fret:', pinky_fret)
-			# except NameError:
-			# 	print("Not ready for image.")
-
 			y_pred = self.model.predict( [ np.reshape( bb, (1,1600,1) ), [ np.reshape(hand_position, (1,25,1) )] ] )
 			# print('stream.is_active():', self.stream.is_active())
 			plt.clf()

@@ -155,7 +155,7 @@ def get_bbox(image, model_filename='detector_good.pth'): # image = cv2.imread(im
 	return orig, np.array([bodyX, bodyY]), np.array([nutX, nutY])
 
 def learn_params():
-	Mrk = cv2.imread('marker_samples4.png')
+	Mrk = cv2.imread('marker_images/marker_samples4.png')
 	mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
 	mh, ms, mv = cv2.split(mrk_hsv)
 	mu = [np.mean(mh), np.mean(ms)]  # 2x1

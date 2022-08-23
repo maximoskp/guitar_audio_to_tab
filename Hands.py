@@ -85,7 +85,7 @@ def onTrack5(val):
 
 
 if __name__ == "__main__":
-  Mrk = cv2.imread('marker_samples4.png')
+  Mrk = cv2.imread('marker_images/marker_samples4.png')
 
   # Get Cr and Cb matrices (i.e. projections each pixel 3D-vector to Cb and Cr axes)
   mrk_hsv = cv2.cvtColor(Mrk, cv2.COLOR_BGR2HSV)
