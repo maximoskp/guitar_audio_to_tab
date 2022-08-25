@@ -23,6 +23,9 @@ with open('data/x_hand.pickle', 'rb') as handle:
 with open('data/y_tab.pickle', 'rb') as handle:
     y_tab = pickle.load(handle)
 
+
+np.random.seed(0) 
+
 idxs = np.random.permutation( x_audio.shape[0] )
 x_audio = x_audio[idxs,:]
 x_hand = x_hand[idxs,:]

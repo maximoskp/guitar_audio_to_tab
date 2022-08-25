@@ -56,6 +56,7 @@ def make_hand_box(highest_fret):
     return handbox
 # end make_hand_box
 
+np.random.seed(0) 
 # keep top_k
 top_k = 4000
 # sample duration in samples

@@ -18,14 +18,15 @@ else:
 
 # prepare
 # main_folder = 'data/gp_token_examples'
-main_folder = '../guitar_tab_transcription/data/DadaGP-v1.1/DadaGP-v1.1'
+# main_folder = '../guitar_tab_transcription/data/DadaGP-v1.1/DadaGP-v1.1'
+main_folder = 'data/DadaGP-v1.1/DadaGP-v1.1'
 
 level_A_folders = os.listdir(main_folder)
 
 # np.random.seed(100)
 # keep percentage of files, for reducing data size for testing
 data_percentage = 0.05
-
+np.random.seed(0) 
 # pieces_events = []
 
 excepted_pieces = []

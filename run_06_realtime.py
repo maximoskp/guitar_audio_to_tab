@@ -23,6 +23,7 @@ import argparse
 # pip install opencv-python mediapipe protobuf==3.20.* matplotlib scipy numpy PyGuitarPro librosa tensorflow pickle5 torch torchvision opencv-contrib-python tqdm imutils
 # conda install -c anaconda pyaudio
 
+
 def make_hand_box(highest_fret):
 	handbox = np.zeros(25)
 	handbox[highest_fret] = 1
