@@ -1,6 +1,5 @@
 data/
 figs/
-models/
 fretboard_detection/dataset/
 fretboard_detection/output/detector*
 simple_image_download/my_dir/
