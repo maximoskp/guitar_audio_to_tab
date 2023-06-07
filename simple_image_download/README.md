@@ -1,4 +1,17 @@
-# Google image downloader
+# Custom README
+
+## Create Data
+Choose the right search keyword and run the download script:
+
+```
+download_images.py -k cello-playing -n 50
+```
+
+To annotate the data you can use a free annotation tool like [Labelbox](https://app.labelbox.com/) or [Label Studio](https://labelstud.io/). The latter requires installation locally.
+
+# Official README
+
+## Google image downloader
 =======================
 Python script that lets you search for urls of images from google images using your tags and/or download them automatically onto you computer
 

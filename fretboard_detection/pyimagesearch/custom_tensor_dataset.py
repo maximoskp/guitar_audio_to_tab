@@ -44,7 +44,7 @@ class CustomTensorDataset(Dataset):
 
 		# __gbastas__
 		image_prev = image.clone().detach() 
-		bbox_prev = bbox.clone().detach() 
+		bbox_prev = bbox.clone().ch() 
 		if self.augment_transforms:
 			bbox = self.from_yolo_to_standard(bbox)
 			# print(np.array(image), np.array(bbox))
