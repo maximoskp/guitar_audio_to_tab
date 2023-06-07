@@ -4,7 +4,7 @@
 Choose the right search keyword and run the download script:
 
 ```
-download_images.py -k cello-playing -n 50
+python download_images.py -k cello-playing -n 50
 ```
 
 To annotate the data you can use a free annotation tool like [Labelbox](https://app.labelbox.com/) or [Label Studio](https://labelstud.io/). The latter requires installation locally.
