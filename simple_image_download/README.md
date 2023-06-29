@@ -7,7 +7,19 @@ Choose the right search keyword and run the download script:
 python download_images.py -k cello-playing -n 50
 ```
 
-To annotate the data you can use a free annotation tool like [Labelbox](https://app.labelbox.com/) or [Label Studio](https://labelstud.io/). The latter requires installation locally.
+Do the same for several keywords.
+
+Copy all diferrent packs of downloaded images (e.g. 'cello-performance', 'cello-solo', 'cello-with-piano', etc.) to ```my_dir/${instrument}-images```.
+
+To annotate the data you can use a free annotation tool like [Make Sense](https://www.makesense.ai/).
+Save each different pack's annotations to ```my_dir/${instrument}-labels and unzip it there.
+Use namings similarly as for cello or guitar already prepared dataset examples.
+
+To distinguish the worth-annotating images and create a more compact dataset For every pack run:
+```
+python distinguish_dataset.py -ldir my_dir/${instrument}-labels/labels_${keyword}
+```
+The outpt is nicely outputed in ```cello-dataset``` dir.
 
 # Official README
 
