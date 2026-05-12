@@ -1,0 +1,2 @@
+,frame_avg_tab_p,frame_avg_tab_r,frame_avg_tab_f,frame_concat_tab_p,frame_concat_tab_r,frame_concat_tab_f,frame_avg_onset_p,frame_avg_onset_r,frame_avg_onset_f,frame_concat_onset_p,frame_concat_onset_r,frame_concat_onset_f,event_avg_p,event_avg_r,event_avg_f,event_micro_p,event_micro_r,event_micro_f,event_tp,event_fp,event_fn
+No00,0.874,0.867,0.865,0.891,0.867,0.879,0.288,0.755,0.403,0.288,0.784,0.421,0.387,0.794,0.497,0.361,0.786,0.495,17817,31545,4854
