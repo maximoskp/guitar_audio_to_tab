@@ -6,10 +6,12 @@ predict.py
 BPM-free frame-level tablature + onset evaluation script.
 
 This version evaluates the non-causal TCN-onset BPM-free model and uses
-millisecond-based tolerances instead of hardcoded frame tolerances:
+millisecond-based tolerances instead of hardcoded frame tolerances. It also
+includes Madmom-style peak-picking helpers for onset activations.
 
-  - onset matching:     same string, onset within +/- onset_tolerance_ms
-  - note-event matching: same string, same fret, onset within +/- event_tolerance_ms
+  - per-string onset matching: same string, onset within +/- onset_tolerance_ms
+  - global onset matching:     onset within +/- onset_tolerance_ms, string ignored
+  - note-event matching:       same string, same fret, onset within +/- event_tolerance_ms
 
 The conversion from frame indices to time is read from config.yaml:
 
@@ -150,6 +152,257 @@ def frame_seconds_from_config(config: Dict[str, Any]) -> float:
     return hop_length / sr
 
 
+
+
+def ms_to_frames(milliseconds: float, frame_seconds: float) -> int:
+    """Convert milliseconds to the nearest number of frames."""
+    if milliseconds is None:
+        return 0
+    if frame_seconds <= 0:
+        raise ValueError(f"Invalid frame_seconds: {frame_seconds}")
+    return max(0, int(round((float(milliseconds) / 1000.0) / float(frame_seconds))))
+
+
+def smooth_signal(activations: np.ndarray, smooth: Optional[int] = None) -> np.ndarray:
+    """
+    Small dependency-free smoothing helper inspired by madmom.
+
+    If smooth is None, 0, or 1, the input is returned unchanged. For an integer
+    smooth value > 1, a centered moving average with zero padding is applied.
+    Works with 1D activations (T,) or 2D activations (T, C), independently per
+    column for 2D input.
+    """
+    x = np.asarray(activations, dtype=np.float32)
+
+    if smooth is None:
+        return x.copy()
+
+    if isinstance(smooth, np.ndarray):
+        kernel = np.asarray(smooth, dtype=np.float32).reshape(-1)
+        if kernel.size <= 1:
+            return x.copy()
+        denom = float(np.sum(kernel)) if float(np.sum(kernel)) != 0 else 1.0
+        kernel = kernel / denom
+        left = kernel.size // 2
+        right = kernel.size - left - 1
+    else:
+        size = int(round(float(smooth)))
+        if size <= 1:
+            return x.copy()
+        kernel = np.ones((size,), dtype=np.float32) / float(size)
+        left = size // 2
+        right = size - left - 1
+
+    if x.ndim == 1:
+        padded = np.pad(x, (left, right), mode="constant")
+        return np.convolve(padded, kernel, mode="valid").astype(np.float32)
+
+    if x.ndim == 2:
+        out = np.zeros_like(x, dtype=np.float32)
+        for c in range(x.shape[1]):
+            padded = np.pad(x[:, c], (left, right), mode="constant")
+            out[:, c] = np.convolve(padded, kernel, mode="valid").astype(np.float32)
+        return out
+
+    raise ValueError("`activations` must be either 1D or 2D")
+
+
+def _moving_window_reduce_1d(x: np.ndarray, pre: int, post: int, reducer: str) -> np.ndarray:
+    """Zero-padded moving mean/max with explicit pre/post frame context."""
+    x = np.asarray(x, dtype=np.float32).reshape(-1)
+    pre = max(0, int(pre))
+    post = max(0, int(post))
+    padded = np.pad(x, (pre, post), mode="constant")
+    out = np.zeros_like(x, dtype=np.float32)
+
+    for i in range(x.shape[0]):
+        window = padded[i : i + pre + post + 1]
+        if reducer == "mean":
+            out[i] = float(np.mean(window))
+        elif reducer == "max":
+            out[i] = float(np.max(window))
+        else:
+            raise ValueError(f"Unknown reducer: {reducer}")
+
+    return out
+
+
+def moving_average(activations: np.ndarray, pre_avg: int = 0, post_avg: int = 0) -> np.ndarray:
+    """Moving average with zero padding, applied per column for 2D arrays."""
+    x = np.asarray(activations, dtype=np.float32)
+    pre_avg = max(0, int(pre_avg))
+    post_avg = max(0, int(post_avg))
+
+    if pre_avg + post_avg + 1 <= 1:
+        return np.zeros_like(x, dtype=np.float32)
+
+    if x.ndim == 1:
+        return _moving_window_reduce_1d(x, pre_avg, post_avg, "mean")
+
+    if x.ndim == 2:
+        out = np.zeros_like(x, dtype=np.float32)
+        for c in range(x.shape[1]):
+            out[:, c] = _moving_window_reduce_1d(x[:, c], pre_avg, post_avg, "mean")
+        return out
+
+    raise ValueError("`activations` must be either 1D or 2D")
+
+
+def moving_maximum(activations: np.ndarray, pre_max: int = 1, post_max: int = 1) -> np.ndarray:
+    """Moving maximum with zero padding, applied per column for 2D arrays."""
+    x = np.asarray(activations, dtype=np.float32)
+    pre_max = max(0, int(pre_max))
+    post_max = max(0, int(post_max))
+
+    if pre_max + post_max + 1 <= 1:
+        return x.copy()
+
+    if x.ndim == 1:
+        return _moving_window_reduce_1d(x, pre_max, post_max, "max")
+
+    if x.ndim == 2:
+        out = np.zeros_like(x, dtype=np.float32)
+        for c in range(x.shape[1]):
+            out[:, c] = _moving_window_reduce_1d(x[:, c], pre_max, post_max, "max")
+        return out
+
+    raise ValueError("`activations` must be either 1D or 2D")
+
+
+def peak_picking(
+    activations: np.ndarray,
+    threshold: float,
+    smooth: Optional[int] = None,
+    pre_avg: int = 0,
+    post_avg: int = 0,
+    pre_max: int = 1,
+    post_max: int = 1,
+):
+    """
+    Dependency-free Madmom-style peak-picking.
+
+    It keeps activations that are:
+      1. above moving average + threshold, and
+      2. equal to the local moving maximum.
+
+    Returns np.nonzero indices, matching madmom's behavior:
+      - 1D input -> array of peak frame indices
+      - 2D input -> tuple(frame_indices, column_indices)
+    """
+    x = smooth_signal(np.asarray(activations, dtype=np.float32), smooth=smooth)
+
+    if x.ndim not in (1, 2):
+        raise ValueError("`activations` must be either 1D or 2D")
+
+    mov_avg = moving_average(x, pre_avg=pre_avg, post_avg=post_avg)
+    detections = x * (x >= (mov_avg + float(threshold)))
+
+    if int(pre_max) + int(post_max) + 1 > 1:
+        mov_max = moving_maximum(detections, pre_max=pre_max, post_max=post_max)
+        detections = detections * (detections == mov_max)
+
+    if x.ndim == 1:
+        return np.nonzero(detections)[0]
+
+    return np.nonzero(detections)
+
+
+def combine_event_frames(frames: Sequence[int], combine_frames: int = 0) -> List[int]:
+    """
+    Keep the left-most event if multiple events occur within combine_frames.
+    This mirrors madmom's combine_events(..., mode='left') behavior.
+    """
+    frames = sorted(int(f) for f in frames)
+    combine_frames = max(0, int(combine_frames))
+
+    if combine_frames <= 0 or len(frames) <= 1:
+        return frames
+
+    combined: List[int] = []
+
+    for f in frames:
+        if not combined or (f - combined[-1]) > combine_frames:
+            combined.append(f)
+
+    return combined
+
+
+def peak_pick_binary_from_scores(
+    scores: np.ndarray,
+    threshold: float,
+    smooth: Optional[int] = None,
+    pre_avg: int = 0,
+    post_avg: int = 0,
+    pre_max: int = 1,
+    post_max: int = 1,
+    combine_frames: int = 0,
+) -> np.ndarray:
+    """
+    Convert onset activation scores to a binary onset matrix using peak-picking.
+
+    scores can be:
+      - shape (T,) for global onsets
+      - shape (T, C) for per-string/per-class onsets
+    """
+    x = np.asarray(scores, dtype=np.float32)
+    binary = np.zeros_like(x, dtype=np.float32)
+
+    peaks = peak_picking(
+        x,
+        threshold=float(threshold),
+        smooth=smooth,
+        pre_avg=int(pre_avg),
+        post_avg=int(post_avg),
+        pre_max=int(pre_max),
+        post_max=int(post_max),
+    )
+
+    if x.ndim == 1:
+        peak_frames = combine_event_frames(peaks.tolist(), combine_frames=combine_frames)
+        binary[peak_frames] = 1.0
+        return binary
+
+    if x.ndim == 2:
+        peak_t, peak_c = peaks
+        for c in range(x.shape[1]):
+            frames_c = peak_t[peak_c == c].tolist()
+            frames_c = combine_event_frames(frames_c, combine_frames=combine_frames)
+            if frames_c:
+                binary[frames_c, c] = 1.0
+        return binary
+
+    raise ValueError("`scores` must be either 1D or 2D")
+
+
+def threshold_binary_from_scores(scores: np.ndarray, threshold: float) -> np.ndarray:
+    return (np.asarray(scores, dtype=np.float32) >= float(threshold)).astype(np.float32)
+
+
+def onset_scores_from_model_output(logits: torch.Tensor, onset_positive_class: int = 1) -> np.ndarray:
+    """
+    Convert onset model output to onset probabilities/scores.
+
+    Supported squeezed shapes:
+      - (T, 6): sigmoid binary logits per string
+      - (T, 6, 2): 2-class per-string logits; use softmax[..., onset_positive_class]
+      - (T, 2): global 2-class logits; use softmax[..., onset_positive_class]
+
+    The current BPM-free model uses (T, 6), but this helper makes predict.py
+    compatible with a future 2-class Softmax-style onset head.
+    """
+    z = torch.squeeze(logits, 0).detach().cpu()
+
+    if z.ndim == 2:
+        # Usually (T, 6) sigmoid logits. If (T, 2), treat as global 2-class.
+        if z.shape[-1] == 2:
+            return torch.softmax(z, dim=-1)[..., int(onset_positive_class)].numpy().astype(np.float32)
+        return torch.sigmoid(z).numpy().astype(np.float32)
+
+    if z.ndim == 3 and z.shape[-1] == 2:
+        return torch.softmax(z, dim=-1)[..., int(onset_positive_class)].numpy().astype(np.float32)
+
+    raise RuntimeError(f"Unexpected onset logits shape after squeeze: {tuple(z.shape)}")
+
 def resolve_npz_dir(explicit_npz_dir: Optional[str], trained_model: str) -> str:
     if explicit_npz_dir is not None:
         return explicit_npz_dir
@@ -278,10 +531,19 @@ def build_model_for_prediction(
     hand_prior_strength = float(metadata_or_config(metadata, config, "hand_prior_strength", 0.35))
     hand_span = int(metadata_or_config(metadata, config, "hand_span", 4))
 
+    # Prefer run metadata. If metadata is missing, infer whether the checkpoint
+    # contains the raw-feature onset projection. This keeps older TCN-onset
+    # checkpoints usable while making the new encoder+raw onset branch explicit.
+    checkpoint_keys = checkpoint_state_dict(model_path).keys()
+    checkpoint_has_raw_onset = any(str(k).startswith("onset_raw_feature_proj.") for k in checkpoint_keys)
+
     onset_hidden_dim = int(metadata_or_config(metadata, config, "onset_hidden_dim", 64))
     onset_dropout = float(metadata_or_config(metadata, config, "onset_dropout", 0.25))
     onset_kernel_size = int(metadata_or_config(metadata, config, "onset_kernel_size", 5))
     onset_tcn_levels = int(metadata_or_config(metadata, config, "onset_tcn_levels", 3))
+    onset_use_raw_features = bool(metadata_or_config(metadata, config, "onset_use_raw_features", checkpoint_has_raw_onset))
+    onset_raw_proj_dim = int(metadata_or_config(metadata, config, "onset_raw_proj_dim", 64))
+    onset_raw_dropout = float(metadata_or_config(metadata, config, "onset_raw_dropout", 0.10))
 
     model = build_tab_estimator(
         mode=mode,
@@ -304,6 +566,9 @@ def build_model_for_prediction(
         onset_dropout=onset_dropout,
         onset_kernel_size=onset_kernel_size,
         onset_tcn_levels=onset_tcn_levels,
+        onset_use_raw_features=onset_use_raw_features,
+        onset_raw_proj_dim=onset_raw_proj_dim,
+        onset_raw_dropout=onset_raw_dropout,
     )
 
     checkpoint = checkpoint_state_dict(model_path)
@@ -316,12 +581,17 @@ def build_model_for_prediction(
         "hand_pos_dim": int(hand_pos_dim),
         "encoder_layers": int(encoder_layers),
         "input_feature_type": input_feature_type,
+        "onset_use_raw_features": bool(onset_use_raw_features),
+        "onset_raw_proj_dim": int(onset_raw_proj_dim),
+        "onset_raw_dropout": float(onset_raw_dropout),
     }
 
     if verbose:
         print("model_path:", model_path)
-        print("architecture: bpm_free_frame_tab_onset_tcn")
+        print("architecture: bpm_free_frame_tab_onset_tcn_encoder_plus_raw" if onset_use_raw_features else "architecture: bpm_free_frame_tab_onset_tcn")
         print("use_hand_position:", use_hand_position)
+        print("onset_use_raw_features:", onset_use_raw_features)
+        print("onset_raw_proj_dim:", onset_raw_proj_dim)
         print("onset_hidden_dim:", onset_hidden_dim)
         print("onset_kernel_size:", onset_kernel_size)
         print("onset_tcn_levels:", onset_tcn_levels)
@@ -424,6 +694,61 @@ def tolerant_onset_precision_recall_f1(
     return precision, recall, f1, int(tp), int(fp), int(fn)
 
 
+
+
+def tolerant_global_onset_precision_recall_f1(
+    pred_global_onset_binary: np.ndarray,
+    gt_global_onset_binary: np.ndarray,
+    frame_seconds: float,
+    tolerance_seconds: float,
+) -> Tuple[float, float, float, int, int, int]:
+    """
+    Global/no-string onset matching.
+
+    A predicted onset is correct if there is any reference onset within
+    +/- tolerance_seconds. String and fret are ignored.
+    """
+    pred_frames = np.where(np.asarray(pred_global_onset_binary).reshape(-1) > 0)[0].tolist()
+    gt_frames = np.where(np.asarray(gt_global_onset_binary).reshape(-1) > 0)[0].tolist()
+
+    if len(pred_frames) == 0 and len(gt_frames) == 0:
+        return 1.0, 1.0, 1.0, 0, 0, 0
+
+    if len(pred_frames) == 0:
+        return 0.0, 0.0, 0.0, 0, 0, int(len(gt_frames))
+
+    if len(gt_frames) == 0:
+        return 0.0, 0.0, 0.0, 0, int(len(pred_frames)), 0
+
+    used_gt = set()
+    tp = 0
+
+    for pf in sorted(pred_frames):
+        best_gt_idx = None
+        best_dt = None
+
+        for gt_idx, gf in enumerate(gt_frames):
+            if gt_idx in used_gt:
+                continue
+
+            dt = abs(float(pf - gf) * float(frame_seconds))
+
+            if dt <= tolerance_seconds:
+                if best_dt is None or dt < best_dt:
+                    best_gt_idx = gt_idx
+                    best_dt = dt
+
+        if best_gt_idx is not None:
+            used_gt.add(best_gt_idx)
+            tp += 1
+
+    fp = len(pred_frames) - tp
+    fn = len(gt_frames) - tp
+
+    precision, recall, f1 = prf_from_counts(tp, fp, fn)
+
+    return precision, recall, f1, int(tp), int(fp), int(fn)
+
 def event_precision_recall_f1_tolerant(
     pred_events: Sequence[Tuple[int, int, int]],
     gt_events: Sequence[Tuple[int, int, int]],
@@ -496,8 +821,16 @@ def calc_score(
     npz_dir: str,
     device: str = "cpu",
     onset_threshold: float = 0.5,
-    onset_tolerance_ms: float = 50.0,
+    onset_tolerance_ms: float = 25.0,
     event_tolerance_ms: float = 50.0,
+    use_peak_picking: bool = True,
+    peak_smooth_ms: float = 0.0,
+    peak_pre_avg_ms: float = 0.0,
+    peak_post_avg_ms: float = 0.0,
+    peak_pre_max_ms: float = 50.0,
+    peak_post_max_ms: float = 50.0,
+    peak_combine_ms: float = 30.0,
+    onset_positive_class: int = 1,
     allow_missing_hand_pos: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
@@ -518,6 +851,14 @@ def calc_score(
     frame_ms = frame_seconds * 1000.0
     onset_tolerance_seconds = float(onset_tolerance_ms) / 1000.0
     event_tolerance_seconds = float(event_tolerance_ms) / 1000.0
+
+    peak_smooth_frames = ms_to_frames(peak_smooth_ms, frame_seconds)
+    peak_pre_avg_frames = ms_to_frames(peak_pre_avg_ms, frame_seconds)
+    peak_post_avg_frames = ms_to_frames(peak_post_avg_ms, frame_seconds)
+    peak_pre_max_frames = ms_to_frames(peak_pre_max_ms, frame_seconds)
+    peak_post_max_frames = ms_to_frames(peak_post_max_ms, frame_seconds)
+    peak_combine_frames = ms_to_frames(peak_combine_ms, frame_seconds)
+    peak_smooth_arg = peak_smooth_frames if peak_smooth_frames > 1 else None
 
     model_path = os.path.join("model", trained_model, f"testNo{fold_id}", f"epoch{use_model_epoch}.model")
 
@@ -549,6 +890,15 @@ def calc_score(
         print(f"onset tolerance: +/- {float(onset_tolerance_ms):.1f} ms")
         print(f"event tolerance: +/- {float(event_tolerance_ms):.1f} ms")
         print(f"onset threshold: {float(onset_threshold):.3f}")
+        print(f"peak picking: {bool(use_peak_picking)}")
+        if use_peak_picking:
+            print(
+                "peak picking frames "
+                f"smooth={peak_smooth_frames}, "
+                f"pre_avg={peak_pre_avg_frames}, post_avg={peak_post_avg_frames}, "
+                f"pre_max={peak_pre_max_frames}, post_max={peak_post_max_frames}, "
+                f"combine={peak_combine_frames}"
+            )
 
     # Dense frame-tab metrics.
     frame_sum_p = frame_sum_r = frame_sum_f = 0.0
@@ -560,9 +910,13 @@ def calc_score(
     exact_onset_concat_pred = np.array([], dtype=np.float32)
     exact_onset_concat_gt = np.array([], dtype=np.float32)
 
-    # Tolerant onset metrics.
+    # Tolerant per-string onset metrics.
     onset_sum_p = onset_sum_r = onset_sum_f = 0.0
     onset_sum_tp = onset_sum_fp = onset_sum_fn = 0
+
+    # Tolerant global/no-string onset metrics.
+    global_onset_sum_p = global_onset_sum_r = global_onset_sum_f = 0.0
+    global_onset_sum_tp = global_onset_sum_fp = global_onset_sum_fn = 0
 
     # Tolerant note-event metrics.
     event_sum_p = event_sum_r = event_sum_f = 0.0
@@ -612,11 +966,50 @@ def calc_score(
         pred_len = int(olens[0].item())
 
         frame_tab_pred = one_hot_argmax_tab(torch.squeeze(frame_tab_score, 0))[:pred_len]
-        frame_onset_score_np = torch.sigmoid(torch.squeeze(frame_onset_logits, 0)).detach().cpu().numpy()[:pred_len]
-        frame_onset_pred = (frame_onset_score_np >= float(onset_threshold)).astype(np.float32)
+        frame_onset_score_np = onset_scores_from_model_output(
+            frame_onset_logits,
+            onset_positive_class=int(onset_positive_class),
+        )[:pred_len]
+
+        if frame_onset_score_np.ndim == 1:
+            # Global-only onset head fallback. Repeat as a diagnostic per-string
+            # score only if needed, but the current model should normally output
+            # per-string scores with shape (T, 6).
+            frame_onset_score_np = np.repeat(frame_onset_score_np[:, None], 6, axis=1)
+
+        if use_peak_picking:
+            frame_onset_pred = peak_pick_binary_from_scores(
+                frame_onset_score_np,
+                threshold=float(onset_threshold),
+                smooth=peak_smooth_arg,
+                pre_avg=peak_pre_avg_frames,
+                post_avg=peak_post_avg_frames,
+                pre_max=peak_pre_max_frames,
+                post_max=peak_post_max_frames,
+                combine_frames=peak_combine_frames,
+            )
+        else:
+            frame_onset_pred = threshold_binary_from_scores(frame_onset_score_np, float(onset_threshold))
 
         frame_tab_gt = frame_tab_gt[:pred_len]
         frame_onset_gt = frame_onset_gt[:pred_len]
+
+        global_onset_score_np = np.max(frame_onset_score_np, axis=1)
+        global_onset_gt = np.any(frame_onset_gt > 0, axis=1).astype(np.float32)
+
+        if use_peak_picking:
+            global_onset_pred = peak_pick_binary_from_scores(
+                global_onset_score_np,
+                threshold=float(onset_threshold),
+                smooth=peak_smooth_arg,
+                pre_avg=peak_pre_avg_frames,
+                post_avg=peak_post_avg_frames,
+                pre_max=peak_pre_max_frames,
+                post_max=peak_post_max_frames,
+                combine_frames=peak_combine_frames,
+            )
+        else:
+            global_onset_pred = threshold_binary_from_scores(global_onset_score_np, float(onset_threshold))
 
         # ------------------------------------------------------------------
         # Dense frame-tab metrics.
@@ -649,7 +1042,7 @@ def calc_score(
         exact_onset_concat_gt = np.concatenate((exact_onset_concat_gt, onset_gt_flat), axis=None)
 
         # ------------------------------------------------------------------
-        # Tolerant onset-only metrics: same string, +/- onset_tolerance_ms.
+        # Tolerant per-string onset-only metrics: same string, +/- onset_tolerance_ms.
         # ------------------------------------------------------------------
         onset_p, onset_r, onset_f, onset_tp, onset_fp, onset_fn = tolerant_onset_precision_recall_f1(
             frame_onset_pred,
@@ -664,6 +1057,25 @@ def calc_score(
         onset_sum_tp += onset_tp
         onset_sum_fp += onset_fp
         onset_sum_fn += onset_fn
+
+        # ------------------------------------------------------------------
+        # Tolerant global onset-only metrics: any string, +/- onset_tolerance_ms.
+        # ------------------------------------------------------------------
+        global_onset_p, global_onset_r, global_onset_f, global_onset_tp, global_onset_fp, global_onset_fn = (
+            tolerant_global_onset_precision_recall_f1(
+                global_onset_pred,
+                global_onset_gt,
+                frame_seconds=frame_seconds,
+                tolerance_seconds=onset_tolerance_seconds,
+            )
+        )
+
+        global_onset_sum_p += global_onset_p
+        global_onset_sum_r += global_onset_r
+        global_onset_sum_f += global_onset_f
+        global_onset_sum_tp += global_onset_tp
+        global_onset_sum_fp += global_onset_fp
+        global_onset_sum_fn += global_onset_fn
 
         # ------------------------------------------------------------------
         # Tolerant decoded note-event metrics: same string/fret, +/- event_tolerance_ms.
@@ -707,12 +1119,22 @@ def calc_score(
             frame_onset_pred_score=frame_onset_score_np,
             frame_onset_pred=frame_onset_pred,
             frame_onset_gt=frame_onset_gt,
+            global_onset_pred_score=global_onset_score_np,
+            global_onset_pred=global_onset_pred,
+            global_onset_gt=global_onset_gt,
             pred_events=np.asarray(pred_events, dtype=np.int64) if pred_events else np.zeros((0, 3), dtype=np.int64),
             gt_events=np.asarray(gt_events, dtype=np.int64) if gt_events else np.zeros((0, 3), dtype=np.int64),
             frame_seconds=np.asarray([frame_seconds], dtype=np.float32),
             onset_tolerance_ms=np.asarray([float(onset_tolerance_ms)], dtype=np.float32),
             event_tolerance_ms=np.asarray([float(event_tolerance_ms)], dtype=np.float32),
             onset_threshold=np.asarray([float(onset_threshold)], dtype=np.float32),
+            use_peak_picking=np.asarray([bool(use_peak_picking)]),
+            peak_smooth_ms=np.asarray([float(peak_smooth_ms)], dtype=np.float32),
+            peak_pre_avg_ms=np.asarray([float(peak_pre_avg_ms)], dtype=np.float32),
+            peak_post_avg_ms=np.asarray([float(peak_post_avg_ms)], dtype=np.float32),
+            peak_pre_max_ms=np.asarray([float(peak_pre_max_ms)], dtype=np.float32),
+            peak_post_max_ms=np.asarray([float(peak_post_max_ms)], dtype=np.float32),
+            peak_combine_ms=np.asarray([float(peak_combine_ms)], dtype=np.float32),
         )
 
     n_files = float(len(test_data_list))
@@ -735,6 +1157,15 @@ def calc_score(
     onset_avg_f = onset_sum_f / n_files
     onset_micro_p, onset_micro_r, onset_micro_f = prf_from_counts(onset_sum_tp, onset_sum_fp, onset_sum_fn)
 
+    global_onset_avg_p = global_onset_sum_p / n_files
+    global_onset_avg_r = global_onset_sum_r / n_files
+    global_onset_avg_f = global_onset_sum_f / n_files
+    global_onset_micro_p, global_onset_micro_r, global_onset_micro_f = prf_from_counts(
+        global_onset_sum_tp,
+        global_onset_sum_fp,
+        global_onset_sum_fn,
+    )
+
     event_avg_p = event_sum_p / n_files
     event_avg_r = event_sum_r / n_files
     event_avg_f = event_sum_f / n_files
@@ -743,9 +1174,11 @@ def calc_score(
     if verbose:
         print(f"frame_avg_tab_p/r/f       = {frame_avg_p:.4f}, {frame_avg_r:.4f}, {frame_avg_f:.4f}")
         print(f"exact_onset_avg_p/r/f     = {exact_onset_avg_p:.4f}, {exact_onset_avg_r:.4f}, {exact_onset_avg_f:.4f}")
-        print(f"tolerant_onset_avg_p/r/f  = {onset_avg_p:.4f}, {onset_avg_r:.4f}, {onset_avg_f:.4f}")
-        print(f"tolerant_onset_micro_p/r/f= {onset_micro_p:.4f}, {onset_micro_r:.4f}, {onset_micro_f:.4f}")
-        print(f"event_avg_p/r/f           = {event_avg_p:.4f}, {event_avg_r:.4f}, {event_avg_f:.4f}")
+        print(f"tolerant_onset_avg_p/r/f        = {onset_avg_p:.4f}, {onset_avg_r:.4f}, {onset_avg_f:.4f}")
+        print(f"tolerant_onset_micro_p/r/f      = {onset_micro_p:.4f}, {onset_micro_r:.4f}, {onset_micro_f:.4f}")
+        print(f"global_onset_avg_p/r/f          = {global_onset_avg_p:.4f}, {global_onset_avg_r:.4f}, {global_onset_avg_f:.4f}")
+        print(f"global_onset_micro_p/r/f        = {global_onset_micro_p:.4f}, {global_onset_micro_r:.4f}, {global_onset_micro_f:.4f}")
+        print(f"event_avg_p/r/f                 = {event_avg_p:.4f}, {event_avg_r:.4f}, {event_avg_f:.4f}")
         print(f"event_micro_p/r/f         = {event_micro_p:.4f}, {event_micro_r:.4f}, {event_micro_f:.4f}")
         print(f"event TP/FP/FN            = {event_sum_tp}, {event_sum_fp}, {event_sum_fn}")
 
@@ -755,6 +1188,13 @@ def calc_score(
             float(onset_tolerance_ms),
             float(event_tolerance_ms),
             float(onset_threshold),
+            float(use_peak_picking),
+            float(peak_smooth_ms),
+            float(peak_pre_avg_ms),
+            float(peak_post_avg_ms),
+            float(peak_pre_max_ms),
+            float(peak_post_max_ms),
+            float(peak_combine_ms),
 
             frame_avg_p,
             frame_avg_r,
@@ -773,6 +1213,16 @@ def calc_score(
             onset_sum_tp,
             onset_sum_fp,
             onset_sum_fn,
+
+            global_onset_avg_p,
+            global_onset_avg_r,
+            global_onset_avg_f,
+            global_onset_micro_p,
+            global_onset_micro_r,
+            global_onset_micro_f,
+            global_onset_sum_tp,
+            global_onset_sum_fp,
+            global_onset_sum_fn,
 
             # Exact diagnostic onset columns.
             exact_onset_avg_p,
@@ -797,6 +1247,13 @@ def calc_score(
             "onset_tolerance_ms",
             "event_tolerance_ms",
             "onset_threshold",
+            "use_peak_picking",
+            "peak_smooth_ms",
+            "peak_pre_avg_ms",
+            "peak_post_avg_ms",
+            "peak_pre_max_ms",
+            "peak_post_max_ms",
+            "peak_combine_ms",
 
             "frame_avg_tab_p",
             "frame_avg_tab_r",
@@ -814,6 +1271,16 @@ def calc_score(
             "onset_tp",
             "onset_fp",
             "onset_fn",
+
+            "global_avg_onset_p",
+            "global_avg_onset_r",
+            "global_avg_onset_f",
+            "global_concat_onset_p",
+            "global_concat_onset_r",
+            "global_concat_onset_f",
+            "global_onset_tp",
+            "global_onset_fp",
+            "global_onset_fn",
 
             "frame_exact_onset_avg_p",
             "frame_exact_onset_avg_r",
@@ -847,7 +1314,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Evaluate a BPM-free frame-tab + TCN-onset checkpoint with "
-            "millisecond-based onset and note-event tolerances."
+            "millisecond-based tolerances, Madmom-style peak-picking, "
+            "and both per-string and global onset metrics."
         )
     )
 
@@ -915,9 +1383,64 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--onset-tolerance-ms",
+        "--no-peak-picking",
+        action="store_true",
+        help="Disable Madmom-style peak-picking and use simple thresholding instead.",
+    )
+
+    parser.add_argument(
+        "--peak-smooth-ms",
+        type=float,
+        default=0.0,
+        help="Optional activation smoothing window in ms before peak-picking. Default: 0.",
+    )
+
+    parser.add_argument(
+        "--peak-pre-avg-ms",
+        type=float,
+        default=0.0,
+        help="Moving-average past context in ms. Usually 0 for neural activations.",
+    )
+
+    parser.add_argument(
+        "--peak-post-avg-ms",
+        type=float,
+        default=0.0,
+        help="Moving-average future context in ms. Usually 0 for neural activations.",
+    )
+
+    parser.add_argument(
+        "--peak-pre-max-ms",
         type=float,
         default=50.0,
+        help="Past context in ms for local-maximum peak-picking. Default: 50 ms.",
+    )
+
+    parser.add_argument(
+        "--peak-post-max-ms",
+        type=float,
+        default=50.0,
+        help="Future context in ms for local-maximum peak-picking. Default: 50 ms.",
+    )
+
+    parser.add_argument(
+        "--peak-combine-ms",
+        type=float,
+        default=30.0,
+        help="Keep only the left-most onset inside this ms window. Default: 30 ms.",
+    )
+
+    parser.add_argument(
+        "--onset-positive-class",
+        type=int,
+        default=1,
+        help="For 2-class onset logits, class index interpreted as onset. Default: 1.",
+    )
+
+    parser.add_argument(
+        "--onset-tolerance-ms",
+        type=float,
+        default=25.0,
         help="Tolerant onset matching window in milliseconds. Default: +/-25 ms.",
     )
 
@@ -989,6 +1512,14 @@ def main():
             onset_threshold=float(args.onset_threshold),
             onset_tolerance_ms=float(args.onset_tolerance_ms),
             event_tolerance_ms=float(args.event_tolerance_ms),
+            use_peak_picking=not bool(args.no_peak_picking),
+            peak_smooth_ms=float(args.peak_smooth_ms),
+            peak_pre_avg_ms=float(args.peak_pre_avg_ms),
+            peak_post_avg_ms=float(args.peak_post_avg_ms),
+            peak_pre_max_ms=float(args.peak_pre_max_ms),
+            peak_post_max_ms=float(args.peak_post_max_ms),
+            peak_combine_ms=float(args.peak_combine_ms),
+            onset_positive_class=int(args.onset_positive_class),
             allow_missing_hand_pos=bool(args.allow_missing_hand_pos),
             verbose=bool(args.verbose),
         )
@@ -1005,6 +1536,7 @@ def main():
     print("Saved metrics to:", csv_path)
     print(f"Onset tolerance: +/- {float(args.onset_tolerance_ms):.1f} ms")
     print(f"Event tolerance: +/- {float(args.event_tolerance_ms):.1f} ms")
+    print(f"Peak picking: {not bool(args.no_peak_picking)}")
 
 
 if __name__ == "__main__":

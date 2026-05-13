@@ -15,7 +15,7 @@ Training targets:
   - frame_tab:   (T, 6, 21), one-hot fret/rest class per string per frame
   - frame_onset: (T, 6), binary onset label per string per frame
 
-The onset branch is a non-causal gated TCN head. It returns raw logits and is
+The onset branch is a non-causal gated TCN head. It receives encoder states plus a projected copy of the raw CQT/mel features by default. It returns raw logits and is
 trained with BCEWithLogitsLoss inside CustomLoss.
 
 If frame_onset is not present in the NPZ, it is derived from frame_tab by
@@ -365,7 +365,10 @@ def build_tab_estimator(
     onset_hidden_dim=64,
     onset_dropout=0.25,
     onset_kernel_size=5,
-    onset_tcn_levels=4,
+    onset_tcn_levels=3,
+    onset_use_raw_features=True,
+    onset_raw_proj_dim=64,
+    onset_raw_dropout=0.10,
 ):
     return TabEstimator(
         mode=mode,
@@ -387,6 +390,9 @@ def build_tab_estimator(
         onset_dropout=onset_dropout,
         onset_kernel_size=onset_kernel_size,
         onset_tcn_levels=onset_tcn_levels,
+        onset_use_raw_features=onset_use_raw_features,
+        onset_raw_proj_dim=onset_raw_proj_dim,
+        onset_raw_dropout=onset_raw_dropout,
     )
 
 
@@ -563,6 +569,9 @@ def train(
         onset_dropout=args.onset_dropout,
         onset_kernel_size=args.onset_kernel_size,
         onset_tcn_levels=args.onset_tcn_levels,
+        onset_use_raw_features=not bool(args.no_onset_raw_features),
+        onset_raw_proj_dim=args.onset_raw_proj_dim,
+        onset_raw_dropout=args.onset_raw_dropout,
     )
 
     for p in model.parameters():
@@ -708,8 +717,11 @@ def parse_args():
     parser.add_argument("--onset-positive-weight", type=float, default=10.0)
     parser.add_argument("--onset-hidden-dim", type=int, default=64, help="Channels per onset TCN layer.")
     parser.add_argument("--onset-dropout", type=float, default=0.25)
-    parser.add_argument("--onset-kernel-size", type=int, default=5, help="Odd kernel size for the non-causal onset TCN.")
+    parser.add_argument("--onset-kernel-size", type=int, default=3, help="Odd kernel size for the non-causal onset TCN.")
     parser.add_argument("--onset-tcn-levels", type=int, default=4, help="Number of dilated gated TCN blocks in the onset head.")
+    parser.add_argument("--no-onset-raw-features", action="store_true", help="Disable feeding projected raw CQT/mel features into the onset TCN head.")
+    parser.add_argument("--onset-raw-proj-dim", type=int, default=64, help="Projection dimension for raw CQT/mel features before concatenating with encoder states.")
+    parser.add_argument("--onset-raw-dropout", type=float, default=0.10, help="Dropout applied to the raw-feature onset projection.")
 
     return parser.parse_args()
 
@@ -764,7 +776,11 @@ def main():
         "hand_span": int(args.hand_span if args.hand_span is not None else config_int(config, "hand_span", 4)),
         "onset_loss_weight": float(args.onset_loss_weight),
         "onset_positive_weight": float(args.onset_positive_weight),
-        "onset_head": "noncausal_gated_tcn",
+        "onset_head": "noncausal_gated_tcn_encoder_plus_raw_features",
+        "onset_input": "encoder_states+projected_raw_features" if not bool(args.no_onset_raw_features) else "encoder_states_only",
+        "onset_use_raw_features": not bool(args.no_onset_raw_features),
+        "onset_raw_proj_dim": int(args.onset_raw_proj_dim),
+        "onset_raw_dropout": float(args.onset_raw_dropout),
         "onset_hidden_dim": int(args.onset_hidden_dim),
         "onset_dropout": float(args.onset_dropout),
         "onset_kernel_size": int(args.onset_kernel_size),
@@ -778,7 +794,7 @@ def main():
     print("npz files:", len(data_list))
     print("model output:", base_model_dir)
     print("tensorboard output:", base_tensorboard_dir)
-    print("architecture: bpm_free_frame_tab_onset_noncausal_tcn")
+    print("architecture: bpm_free_frame_tab_onset_noncausal_tcn_encoder_plus_raw")
 
     n_folds = int(args.n_folds)
     if args.test_num is not None:

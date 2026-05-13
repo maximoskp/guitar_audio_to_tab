@@ -16,6 +16,10 @@ The model predicts directly on the audio frame timeline:
   - frame_tab_pred:   (B, T_frame, 6, 21)
   - frame_onset_logits: (B, T_frame, 6), raw onset logits
 
+The onset head receives both encoder states and a learned projection of the
+raw input features, so transient CQT/mel information is not forced to pass only
+through the shared tablature encoder.
+
 The intended runtime decoder is:
   sigmoid(frame_onset_logits) gives note-start probabilities;
   frame_tab_pred gives string/fret labels at those times;
@@ -486,6 +490,9 @@ class TabEstimator(torch.nn.Module):
         onset_dropout=0.25,
         onset_kernel_size=5,
         onset_tcn_levels=3,
+        onset_use_raw_features=True,
+        onset_raw_proj_dim=64,
+        onset_raw_dropout=0.10,
         **unused_kwargs,
     ):
         super().__init__()
@@ -510,6 +517,10 @@ class TabEstimator(torch.nn.Module):
         self.hand_position_fusion = str(hand_position_fusion)
         self.hand_prior_strength = float(hand_prior_strength)
         self.hand_span = int(hand_span)
+
+        self.onset_use_raw_features = bool(onset_use_raw_features)
+        self.onset_raw_proj_dim = int(onset_raw_proj_dim)
+        self.onset_raw_dropout = float(onset_raw_dropout)
 
         if self.hand_position_fusion not in ["hidden", "prior", "hidden+prior", "none"]:
             raise ValueError(
@@ -564,9 +575,20 @@ class TabEstimator(torch.nn.Module):
         )
         self.softmax_by_string = nn.Softmax(dim=3)
 
+        if self.onset_use_raw_features:
+            self.onset_raw_feature_proj = nn.Sequential(
+                nn.Linear(int(n_bins), self.onset_raw_proj_dim),
+                nn.LayerNorm(self.onset_raw_proj_dim),
+                nn.Dropout(self.onset_raw_dropout),
+            )
+            onset_input_size = self.encoder_output_size + self.onset_raw_proj_dim
+        else:
+            self.onset_raw_feature_proj = None
+            onset_input_size = self.encoder_output_size
+
         onset_channels = tuple([int(onset_hidden_dim)] * int(onset_tcn_levels))
         self.frame_onset_output_layer = OnsetTCNHead(
-            input_size=self.encoder_output_size,
+            input_size=onset_input_size,
             output_size=6,
             num_channels=onset_channels,
             kernel_size=int(onset_kernel_size),
@@ -600,6 +622,7 @@ class TabEstimator(torch.nn.Module):
 
     def forward(self, src_pad, src_len, frame_hand_pos=None):
         batch_size = src_pad.shape[0]
+        raw_features = src_pad
 
         if self.use_conv_stack:
             encoder_in = self.convstack(torch.unsqueeze(src_pad, dim=1))
@@ -623,6 +646,25 @@ class TabEstimator(torch.nn.Module):
                 strength=self.hand_prior_strength,
             )
 
-        frame_onset_logits = self.frame_onset_output_layer(memory)
+        onset_input = memory
+
+        if self.onset_raw_feature_proj is not None:
+            raw_proj = self.onset_raw_feature_proj(
+                raw_features.to(device=memory.device, dtype=memory.dtype)
+            )
+
+            if raw_proj.size(1) != memory.size(1):
+                raw_proj = raw_proj.transpose(1, 2)
+                raw_proj = F.interpolate(
+                    raw_proj,
+                    size=int(memory.size(1)),
+                    mode="linear",
+                    align_corners=False,
+                )
+                raw_proj = raw_proj.transpose(1, 2)
+
+            onset_input = torch.cat([memory, raw_proj], dim=-1)
+
+        frame_onset_logits = self.frame_onset_output_layer(onset_input)
 
         return frame_tab_pred, frame_onset_logits, olens
