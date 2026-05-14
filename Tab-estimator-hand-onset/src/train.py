@@ -15,12 +15,11 @@ Training targets:
   - frame_tab:   (T, 6, 21), one-hot fret/rest class per string per frame
   - frame_onset: (T, 6), binary onset label per string per frame
 
-The onset branch is a non-causal gated TCN head. It receives encoder states plus a projected copy of the raw CQT/mel features by default. It returns raw logits and is
-trained with BCEWithLogitsLoss inside CustomLoss.
+The onset branch has two non-causal gated TCN heads: a per-string onset head and a global/no-string onset head. Both receive encoder states plus a projected copy of the raw CQT/mel features by default. They return raw logits and are trained with BCEWithLogitsLoss inside CustomLoss.
 
 If frame_onset is not present in the NPZ, it is derived from frame_tab by
 marking a string onset whenever the active fret changes from rest/different fret
-to a played fret.
+to a played fret. Training labels can be widened in time, e.g. +/-25 ms or +/-50 ms, while evaluation still uses original onset locations.
 """
 
 import argparse
@@ -206,6 +205,76 @@ def load_frame_onset_from_npz(data, frame_tab):
     return derive_frame_onsets_from_frame_tab(frame_tab)
 
 
+
+def ms_to_frames(milliseconds, hop_length, sample_rate):
+    frame_ms = 1000.0 * float(hop_length) / float(sample_rate)
+    if frame_ms <= 0:
+        raise ValueError(f"Invalid frame step: {frame_ms} ms")
+    return max(0, int(round(float(milliseconds) / frame_ms)))
+
+
+def widen_binary_onset_targets(onset, radius_frames=0, mode="hard", sigma_frames=1.0):
+    """
+    Widen onset targets for training.
+
+    onset shape:
+        (T, 6) or (T,)
+
+    mode:
+        hard:       all frames within radius get 1.0
+        triangular: center=1.0, linearly decreasing around it
+        gaussian:   Gaussian bump around each onset
+    """
+    onset = np.asarray(onset, dtype=np.float32)
+    radius_frames = int(radius_frames)
+    if radius_frames <= 0:
+        return onset.copy()
+
+    mode = str(mode).lower()
+    sigma_frames = max(1e-6, float(sigma_frames))
+    widened = np.zeros_like(onset, dtype=np.float32)
+
+    if onset.ndim == 1:
+        active = np.where(onset > 0)[0]
+        for t in active:
+            for dt in range(-radius_frames, radius_frames + 1):
+                u = int(t + dt)
+                if u < 0 or u >= onset.shape[0]:
+                    continue
+                if mode == "hard":
+                    value = 1.0
+                elif mode == "triangular":
+                    value = 1.0 - abs(dt) / float(radius_frames + 1)
+                elif mode == "gaussian":
+                    value = float(np.exp(-0.5 * (dt / sigma_frames) ** 2))
+                else:
+                    raise ValueError(f"Unknown onset widening mode: {mode}")
+                widened[u] = max(float(widened[u]), float(value))
+        return widened
+
+    if onset.ndim == 2:
+        T, S = onset.shape
+        for s in range(S):
+            active = np.where(onset[:, s] > 0)[0]
+            for t in active:
+                for dt in range(-radius_frames, radius_frames + 1):
+                    u = int(t + dt)
+                    if u < 0 or u >= T:
+                        continue
+                    if mode == "hard":
+                        value = 1.0
+                    elif mode == "triangular":
+                        value = 1.0 - abs(dt) / float(radius_frames + 1)
+                    elif mode == "gaussian":
+                        value = float(np.exp(-0.5 * (dt / sigma_frames) ** 2))
+                    else:
+                        raise ValueError(f"Unknown onset widening mode: {mode}")
+                    widened[u, s] = max(float(widened[u, s]), float(value))
+        return widened
+
+    raise ValueError(f"Expected onset target shape (T,) or (T,6), got {onset.shape}")
+
+
 # -----------------------------------------------------------------------------
 # Dataset and collation
 # -----------------------------------------------------------------------------
@@ -219,12 +288,18 @@ class FrameOnsetDataset(Dataset):
         use_hand_position=False,
         hand_pos_dim=20,
         allow_missing_hand_pos=False,
+        onset_target_radius_frames=0,
+        onset_target_mode="hard",
+        onset_target_sigma_frames=1.0,
     ):
         self.data_list = list(data_list)
         self.input_feature_type = str(input_feature_type)
         self.use_hand_position = bool(use_hand_position)
         self.hand_pos_dim = int(hand_pos_dim)
         self.allow_missing_hand_pos = bool(allow_missing_hand_pos)
+        self.onset_target_radius_frames = int(onset_target_radius_frames)
+        self.onset_target_mode = str(onset_target_mode)
+        self.onset_target_sigma_frames = float(onset_target_sigma_frames)
 
     def __len__(self):
         return len(self.data_list)
@@ -256,6 +331,12 @@ class FrameOnsetDataset(Dataset):
         input_features = input_features[:target_len]
         frame_tab = frame_tab[:target_len]
         frame_onset = frame_onset[:target_len]
+        frame_onset = widen_binary_onset_targets(
+            frame_onset,
+            radius_frames=self.onset_target_radius_frames,
+            mode=self.onset_target_mode,
+            sigma_frames=self.onset_target_sigma_frames,
+        )
         frame_len = int(target_len)
 
         frame_hand_pos = None
@@ -364,8 +445,8 @@ def build_tab_estimator(
     hand_span=4,
     onset_hidden_dim=64,
     onset_dropout=0.25,
-    onset_kernel_size=5,
-    onset_tcn_levels=3,
+    onset_kernel_size=3,
+    onset_tcn_levels=4,
     onset_use_raw_features=True,
     onset_raw_proj_dim=64,
     onset_raw_dropout=0.10,
@@ -494,13 +575,20 @@ def run_epoch(model, loader, criterion, optimizer, device, train_mode=True, free
             optimizer.zero_grad()
 
         with torch.set_grad_enabled(train_mode):
-            frame_tab_pred, frame_onset_pred, olens = model_forward(
+            frame_tab_pred, frame_onset_pred, global_onset_pred, olens = model_forward(
                 model,
                 input_features,
                 frame_len,
                 frame_hand_pos=frame_hand_pos,
             )
-            loss = criterion(frame_tab_pred, frame_tab, frame_onset_pred, frame_onset, olens)
+            loss = criterion(
+                frame_tab_pred,
+                frame_tab,
+                frame_onset_pred,
+                global_onset_pred,
+                frame_onset,
+                olens,
+            )
 
             if train_mode:
                 loss.backward()
@@ -592,6 +680,8 @@ def train(
     criterion = CustomLoss(
         onset_loss_weight=args.onset_loss_weight,
         onset_positive_weight=args.onset_positive_weight,
+        global_onset_loss_weight=args.global_onset_loss_weight,
+        global_onset_positive_weight=args.global_onset_positive_weight,
         tab_loss_weight=args.tab_loss_weight,
     ).to(device)
 
@@ -608,6 +698,16 @@ def train(
         use_hand_position=use_hand_position,
         hand_pos_dim=hand_pos_dim,
         allow_missing_hand_pos=args.allow_missing_hand_pos,
+        onset_target_radius_frames=ms_to_frames(
+            args.onset_target_radius_ms,
+            hop_length=hop_length,
+            sample_rate=sr,
+        ),
+        onset_target_mode=args.onset_target_mode,
+        onset_target_sigma_frames=max(
+            1.0,
+            ms_to_frames(args.onset_target_radius_ms, hop_length=hop_length, sample_rate=sr) / 2.0,
+        ),
     )
     valid_dataset = FrameOnsetDataset(
         valid_data_list,
@@ -615,6 +715,16 @@ def train(
         use_hand_position=use_hand_position,
         hand_pos_dim=hand_pos_dim,
         allow_missing_hand_pos=args.allow_missing_hand_pos,
+        onset_target_radius_frames=ms_to_frames(
+            args.onset_target_radius_ms,
+            hop_length=hop_length,
+            sample_rate=sr,
+        ),
+        onset_target_mode=args.onset_target_mode,
+        onset_target_sigma_frames=max(
+            1.0,
+            ms_to_frames(args.onset_target_radius_ms, hop_length=hop_length, sample_rate=sr) / 2.0,
+        ),
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -715,10 +825,14 @@ def parse_args():
     parser.add_argument("--tab-loss-weight", type=float, default=1.0)
     parser.add_argument("--onset-loss-weight", type=float, default=0.25)
     parser.add_argument("--onset-positive-weight", type=float, default=10.0)
+    parser.add_argument("--global-onset-loss-weight", type=float, default=0.25)
+    parser.add_argument("--global-onset-positive-weight", type=float, default=10.0)
     parser.add_argument("--onset-hidden-dim", type=int, default=64, help="Channels per onset TCN layer.")
     parser.add_argument("--onset-dropout", type=float, default=0.25)
-    parser.add_argument("--onset-kernel-size", type=int, default=3, help="Odd kernel size for the non-causal onset TCN.")
-    parser.add_argument("--onset-tcn-levels", type=int, default=4, help="Number of dilated gated TCN blocks in the onset head.")
+    parser.add_argument("--onset-kernel-size", type=int, default=3, help="Odd kernel size for the non-causal onset TCN. Default: 3.")
+    parser.add_argument("--onset-tcn-levels", type=int, default=4, help="Number of dilated gated TCN blocks in the onset head. Default: 4.")
+    parser.add_argument("--onset-target-radius-ms", type=float, default=25.0, help="Widen onset training labels by this many ms on both sides. Default: +/-25 ms.")
+    parser.add_argument("--onset-target-mode", choices=["hard", "triangular", "gaussian"], default="hard", help="Shape of widened onset training labels.")
     parser.add_argument("--no-onset-raw-features", action="store_true", help="Disable feeding projected raw CQT/mel features into the onset TCN head.")
     parser.add_argument("--onset-raw-proj-dim", type=int, default=64, help="Projection dimension for raw CQT/mel features before concatenating with encoder states.")
     parser.add_argument("--onset-raw-dropout", type=float, default=0.10, help="Dropout applied to the raw-feature onset projection.")
@@ -768,7 +882,7 @@ def main():
         "base_tensorboard_dir": base_tensorboard_dir,
         "uses_bpm": False,
         "uses_note_pred": False,
-        "outputs": ["frame_tab_pred", "frame_onset_pred"],
+        "outputs": ["frame_tab_pred", "frame_onset_pred", "global_onset_pred"],
         "use_hand_position": bool(args.use_hand_position or config_bool(config, "use_hand_position", False)),
         "hand_pos_dim": int(args.hand_pos_dim if args.hand_pos_dim is not None else config_int(config, "hand_pos_dim", 20)),
         "hand_position_fusion": str(args.hand_position_fusion if args.hand_position_fusion is not None else config_str(config, "hand_position_fusion", "hidden+prior")),
@@ -776,7 +890,11 @@ def main():
         "hand_span": int(args.hand_span if args.hand_span is not None else config_int(config, "hand_span", 4)),
         "onset_loss_weight": float(args.onset_loss_weight),
         "onset_positive_weight": float(args.onset_positive_weight),
-        "onset_head": "noncausal_gated_tcn_encoder_plus_raw_features",
+        "global_onset_loss_weight": float(args.global_onset_loss_weight),
+        "global_onset_positive_weight": float(args.global_onset_positive_weight),
+        "onset_target_radius_ms": float(args.onset_target_radius_ms),
+        "onset_target_mode": str(args.onset_target_mode),
+        "onset_head": "noncausal_gated_tcn_encoder_plus_raw_features_per_string_and_global",
         "onset_input": "encoder_states+projected_raw_features" if not bool(args.no_onset_raw_features) else "encoder_states_only",
         "onset_use_raw_features": not bool(args.no_onset_raw_features),
         "onset_raw_proj_dim": int(args.onset_raw_proj_dim),
@@ -794,7 +912,7 @@ def main():
     print("npz files:", len(data_list))
     print("model output:", base_model_dir)
     print("tensorboard output:", base_tensorboard_dir)
-    print("architecture: bpm_free_frame_tab_onset_noncausal_tcn_encoder_plus_raw")
+    print("architecture: bpm_free_frame_tab_global_onset_noncausal_tcn_encoder_plus_raw")
 
     n_folds = int(args.n_folds)
     if args.test_num is not None:

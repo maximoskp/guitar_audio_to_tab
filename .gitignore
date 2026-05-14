@@ -9,3 +9,10 @@ simple_image_download/my_dir/guitar-labels/
 simple_image_download/simple_images/
 .DS_Store
 __pycache__/
+*.wav
+*.npz
+*.jams
+*.mid
+*.model
+*.txt
+Tab-estimator-hand/tensorboard

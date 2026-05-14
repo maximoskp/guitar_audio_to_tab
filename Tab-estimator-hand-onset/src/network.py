@@ -14,15 +14,17 @@ This version intentionally removes the legacy beat-synchronous note-level path:
 
 The model predicts directly on the audio frame timeline:
   - frame_tab_pred:   (B, T_frame, 6, 21)
-  - frame_onset_logits: (B, T_frame, 6), raw onset logits
+  - frame_onset_logits:        (B, T_frame, 6), raw per-string onset logits
+  - global_onset_logits:       (B, T_frame), raw global/no-string onset logits
 
 The onset head receives both encoder states and a learned projection of the
 raw input features, so transient CQT/mel information is not forced to pass only
 through the shared tablature encoder.
 
 The intended runtime decoder is:
-  sigmoid(frame_onset_logits) gives note-start probabilities;
-  frame_tab_pred gives string/fret labels at those times;
+  sigmoid(global_onset_logits) gives global note-start timing;
+  sigmoid(frame_onset_logits) gives optional per-string onset support;
+  frame_tab_pred gives string/fret labels in a short post-onset window;
   nearby onsets can be grouped into chords as post-processing.
 """
 
@@ -376,39 +378,45 @@ class CustomLoss(nn.Module):
     """
     BPM-free frame-level loss.
 
-    frame_tab_pred:   (B, T, 6, 21), probabilities after softmax over frets
-    frame_tab_gt:     (B, T, 6, 21), one-hot labels
-    frame_onset_pred: (B, T, 6), raw logits from the onset TCN head
-    frame_onset_gt:   (B, T, 6), binary labels
-    olens:            (B,), valid frame lengths after encoder
+    frame_tab_pred:          (B, T, 6, 21), probabilities after softmax over frets
+    frame_tab_gt:            (B, T, 6, 21), one-hot labels
+    frame_onset_pred:        (B, T, 6), raw per-string onset logits
+    global_onset_pred:       (B, T), raw global/no-string onset logits
+    frame_onset_gt:          (B, T, 6), binary or soft widened labels
+    olens:                   (B,), valid frame lengths after encoder
+
+    The global target is derived as max(frame_onset_gt, string_dim). If training
+    labels have been widened, the global labels are widened too.
     """
 
     def __init__(
         self,
         onset_loss_weight=0.25,
         onset_positive_weight=10.0,
+        global_onset_loss_weight=0.25,
+        global_onset_positive_weight=10.0,
         tab_loss_weight=1.0,
     ):
         super().__init__()
         self.onset_loss_weight = float(onset_loss_weight)
         self.onset_positive_weight = float(onset_positive_weight)
+        self.global_onset_loss_weight = float(global_onset_loss_weight)
+        self.global_onset_positive_weight = float(global_onset_positive_weight)
         self.tab_loss_weight = float(tab_loss_weight)
 
-    @staticmethod
-    def _resize_time_like(target, pred):
-        if target.size(1) == pred.size(1):
-            return target
-        x = target.transpose(1, -1)
-        x = F.interpolate(x, size=pred.size(1), mode="nearest")
-        x = x.transpose(1, -1)
-        return x
-
-    def forward(self, frame_tab_pred, frame_tab_gt, frame_onset_pred, frame_onset_gt, olens):
+    def forward(
+        self,
+        frame_tab_pred,
+        frame_tab_gt,
+        frame_onset_pred,
+        global_onset_pred,
+        frame_onset_gt,
+        olens,
+    ):
         frame_tab_gt = frame_tab_gt.to(device=frame_tab_pred.device, dtype=frame_tab_pred.dtype)
         frame_onset_gt = frame_onset_gt.to(device=frame_onset_pred.device, dtype=frame_onset_pred.dtype)
 
         if frame_tab_gt.size(1) != frame_tab_pred.size(1):
-            # Nearest resize is a fallback for unusual encoder length changes.
             frame_tab_gt = frame_tab_gt.permute(0, 2, 3, 1)
             frame_tab_gt = F.interpolate(frame_tab_gt, size=frame_tab_pred.size(1), mode="nearest")
             frame_tab_gt = frame_tab_gt.permute(0, 3, 1, 2)
@@ -418,18 +426,19 @@ class CustomLoss(nn.Module):
             frame_onset_gt = F.interpolate(frame_onset_gt, size=frame_onset_pred.size(1), mode="nearest")
             frame_onset_gt = frame_onset_gt.transpose(1, 2)
 
+        if global_onset_pred.dim() == 3 and global_onset_pred.size(-1) == 1:
+            global_onset_pred = global_onset_pred.squeeze(-1)
+
         olens = olens.to(device=frame_tab_pred.device)
         frame_mask = make_non_pad_mask(olens).to(frame_tab_pred.device)
 
-        # Tab loss: original TabEstimator-style binary cross entropy over one-hot tab grid.
+        # Frame tab loss: original TabEstimator-style CE over one-hot tab grid.
         tab_loss = -frame_tab_gt * torch.log(frame_tab_pred.clamp_min(1e-7))
         tab_loss = tab_loss * frame_mask[:, :, None, None]
         tab_denom = frame_mask.sum().clamp_min(1).float() * 6.0
         tab_loss = tab_loss.sum() / tab_denom
 
-        # Onset loss: weighted BCE on raw logits because onsets are sparse.
-        # A scalar pos_weight broadcasts over (B, T, 6). This avoids applying a
-        # sigmoid inside the model and is numerically more stable than manual BCE.
+        # Per-string onset loss.
         pos_weight = torch.tensor(
             float(self.onset_positive_weight),
             device=frame_onset_pred.device,
@@ -445,7 +454,28 @@ class CustomLoss(nn.Module):
         onset_denom = frame_mask.sum().clamp_min(1).float() * 6.0
         onset_loss = onset_loss.sum() / onset_denom
 
-        return self.tab_loss_weight * tab_loss + self.onset_loss_weight * onset_loss
+        # Global onset loss. The target is active if any string has an onset.
+        global_onset_gt = torch.max(frame_onset_gt, dim=2).values
+        global_pos_weight = torch.tensor(
+            float(self.global_onset_positive_weight),
+            device=global_onset_pred.device,
+            dtype=global_onset_pred.dtype,
+        )
+        global_onset_loss = F.binary_cross_entropy_with_logits(
+            global_onset_pred,
+            global_onset_gt,
+            pos_weight=global_pos_weight,
+            reduction="none",
+        )
+        global_onset_loss = global_onset_loss * frame_mask
+        global_denom = frame_mask.sum().clamp_min(1).float()
+        global_onset_loss = global_onset_loss.sum() / global_denom
+
+        return (
+            self.tab_loss_weight * tab_loss
+            + self.onset_loss_weight * onset_loss
+            + self.global_onset_loss_weight * global_onset_loss
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -488,8 +518,8 @@ class TabEstimator(torch.nn.Module):
         hand_span=4,
         onset_hidden_dim=64,
         onset_dropout=0.25,
-        onset_kernel_size=5,
-        onset_tcn_levels=3,
+        onset_kernel_size=3,
+        onset_tcn_levels=4,
         onset_use_raw_features=True,
         onset_raw_proj_dim=64,
         onset_raw_dropout=0.10,
@@ -594,6 +624,13 @@ class TabEstimator(torch.nn.Module):
             kernel_size=int(onset_kernel_size),
             dropout=float(onset_dropout),
         )
+        self.global_onset_output_layer = OnsetTCNHead(
+            input_size=onset_input_size,
+            output_size=1,
+            num_channels=onset_channels,
+            kernel_size=int(onset_kernel_size),
+            dropout=float(onset_dropout),
+        )
 
         if self.use_hand_position:
             if self.hand_position_fusion in ["hidden", "hidden+prior"]:
@@ -666,5 +703,6 @@ class TabEstimator(torch.nn.Module):
             onset_input = torch.cat([memory, raw_proj], dim=-1)
 
         frame_onset_logits = self.frame_onset_output_layer(onset_input)
+        global_onset_logits = self.global_onset_output_layer(onset_input).squeeze(-1)
 
-        return frame_tab_pred, frame_onset_logits, olens
+        return frame_tab_pred, frame_onset_logits, global_onset_logits, olens

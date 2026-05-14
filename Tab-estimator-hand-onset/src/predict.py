@@ -11,7 +11,7 @@ includes Madmom-style peak-picking helpers for onset activations.
 
   - per-string onset matching: same string, onset within +/- onset_tolerance_ms
   - global onset matching:     onset within +/- onset_tolerance_ms, string ignored
-  - note-event matching:       same string, same fret, onset within +/- event_tolerance_ms
+  - note-event matching:       global onset timing + post-onset fret/string window, then same string/fret within +/- event_tolerance_ms
 
 The conversion from frame indices to time is read from config.yaml:
 
@@ -28,7 +28,8 @@ It evaluates:
   2. onset precision/recall/F1 over note starts on (time, string)
      using a tolerant matching window, default +/-25 ms
   3. onset-decoded note-event precision/recall/F1 over (time, string, fret)
-     using a tolerant matching window, default +/-50 ms
+     using global onset peaks for event timing and a short post-onset window
+     for fret/string assignment; default note-event tolerance is +/-50 ms
 
 The old frame-exact onset scores are also saved as diagnostic columns:
     frame_exact_onset_*
@@ -403,6 +404,30 @@ def onset_scores_from_model_output(logits: torch.Tensor, onset_positive_class: i
 
     raise RuntimeError(f"Unexpected onset logits shape after squeeze: {tuple(z.shape)}")
 
+
+
+def global_onset_scores_from_model_output(logits: torch.Tensor, onset_positive_class: int = 1) -> np.ndarray:
+    """
+    Convert global onset model output to a 1D probability vector.
+
+    Supported squeezed shapes:
+      - (T,): sigmoid binary logits
+      - (T, 1): sigmoid binary logits
+      - (T, 2): 2-class logits; use softmax[..., onset_positive_class]
+    """
+    z = torch.squeeze(logits, 0).detach().cpu()
+
+    if z.ndim == 1:
+        return torch.sigmoid(z).numpy().astype(np.float32)
+
+    if z.ndim == 2:
+        if z.shape[-1] == 1:
+            return torch.sigmoid(z[:, 0]).numpy().astype(np.float32)
+        if z.shape[-1] == 2:
+            return torch.softmax(z, dim=-1)[..., int(onset_positive_class)].numpy().astype(np.float32)
+
+    raise RuntimeError(f"Unexpected global onset logits shape after squeeze: {tuple(z.shape)}")
+
 def resolve_npz_dir(explicit_npz_dir: Optional[str], trained_model: str) -> str:
     if explicit_npz_dir is not None:
         return explicit_npz_dir
@@ -432,7 +457,11 @@ def checkpoint_has_hand_layers(checkpoint_path: str) -> bool:
 def checkpoint_is_bpm_free_onset(checkpoint_path: str) -> bool:
     state = checkpoint_state_dict(checkpoint_path)
 
-    has_onset = any(str(k).startswith("frame_onset_output_layer.") for k in state.keys())
+    has_onset = any(
+        str(k).startswith("frame_onset_output_layer.")
+        or str(k).startswith("global_onset_output_layer.")
+        for k in state.keys()
+    )
 
     # Legacy TabEstimator checkpoints contain note-path parameters. This script is only
     # for the clean BPM-free frame/onset network.
@@ -539,8 +568,8 @@ def build_model_for_prediction(
 
     onset_hidden_dim = int(metadata_or_config(metadata, config, "onset_hidden_dim", 64))
     onset_dropout = float(metadata_or_config(metadata, config, "onset_dropout", 0.25))
-    onset_kernel_size = int(metadata_or_config(metadata, config, "onset_kernel_size", 5))
-    onset_tcn_levels = int(metadata_or_config(metadata, config, "onset_tcn_levels", 3))
+    onset_kernel_size = int(metadata_or_config(metadata, config, "onset_kernel_size", 3))
+    onset_tcn_levels = int(metadata_or_config(metadata, config, "onset_tcn_levels", 4))
     onset_use_raw_features = bool(metadata_or_config(metadata, config, "onset_use_raw_features", checkpoint_has_raw_onset))
     onset_raw_proj_dim = int(metadata_or_config(metadata, config, "onset_raw_proj_dim", 64))
     onset_raw_dropout = float(metadata_or_config(metadata, config, "onset_raw_dropout", 0.10))
@@ -609,7 +638,7 @@ def decode_events_from_tab_and_onset(
     onset_binary: np.ndarray,
 ) -> List[Tuple[int, int, int]]:
     """
-    Convert dense frame tab + binary onsets to note events.
+    Convert dense frame tab + per-string binary onsets to note events.
 
     Returns events as tuples:
         (frame_index, string_index_low_e_first, fret)
@@ -631,6 +660,74 @@ def decode_events_from_tab_and_onset(
                 continue
 
             events.append((int(t), int(s), fret))
+
+    return events
+
+
+def decode_events_from_global_onsets_and_tab_window(
+    tab_scores: np.ndarray,
+    global_onset_binary: np.ndarray,
+    string_onset_scores: Optional[np.ndarray] = None,
+    label_window_frames: int = 2,
+    tab_threshold: float = 0.50,
+    string_threshold: float = 0.30,
+    use_string_onset_filter: bool = True,
+) -> List[Tuple[int, int, int]]:
+    """
+    Decode note events from global onset timing and a short post-onset tab window.
+
+    The global onset detector supplies event times. For each global onset frame t,
+    the decoder looks from t to t + label_window_frames and chooses the best
+    non-rest fret per string from frame_tab probabilities. Optionally, the
+    per-string onset head filters which strings are allowed to emit notes.
+
+    Returns events as tuples:
+        (global_onset_frame, string_index_low_e_first, fret)
+    """
+    tab_scores = np.asarray(tab_scores, dtype=np.float32)
+    global_onset_binary = np.asarray(global_onset_binary).reshape(-1) > 0
+
+    if tab_scores.ndim != 3 or tab_scores.shape[1] != 6 or tab_scores.shape[2] < REST_CLASS + 1:
+        raise ValueError(f"Expected tab_scores shape (T, 6, 21), got {tab_scores.shape}")
+
+    if string_onset_scores is not None:
+        string_onset_scores = np.asarray(string_onset_scores, dtype=np.float32)
+        if string_onset_scores.ndim != 2 or string_onset_scores.shape[1] != 6:
+            raise ValueError(f"Expected string_onset_scores shape (T, 6), got {string_onset_scores.shape}")
+
+    T = min(tab_scores.shape[0], global_onset_binary.shape[0])
+    label_window_frames = max(0, int(label_window_frames))
+    events: List[Tuple[int, int, int]] = []
+
+    for t in np.where(global_onset_binary[:T])[0].tolist():
+        start = int(t)
+        end = min(T, start + label_window_frames + 1)
+        if end <= start:
+            continue
+
+        tab_window = tab_scores[start:end, :, :REST_CLASS]
+
+        if string_onset_scores is not None:
+            onset_window = string_onset_scores[start:end, :]
+        else:
+            onset_window = None
+
+        for s in range(6):
+            # Optional per-string onset support. This keeps global timing but
+            # avoids emitting every currently sustained string at each global peak.
+            if use_string_onset_filter and onset_window is not None:
+                if float(np.max(onset_window[:, s])) < float(string_threshold):
+                    continue
+
+            string_window = tab_window[:, s, :]
+            flat_idx = int(np.argmax(string_window))
+            local_frame_idx, fret = np.unravel_index(flat_idx, string_window.shape)
+            score = float(string_window[local_frame_idx, fret])
+
+            if score < float(tab_threshold):
+                continue
+
+            events.append((int(t), int(s), int(fret)))
 
     return events
 
@@ -830,6 +927,10 @@ def calc_score(
     peak_pre_max_ms: float = 50.0,
     peak_post_max_ms: float = 50.0,
     peak_combine_ms: float = 30.0,
+    event_label_window_ms: float = 50.0,
+    event_tab_threshold: float = 0.50,
+    event_string_threshold: float = 0.30,
+    no_event_string_filter: bool = False,
     onset_positive_class: int = 1,
     allow_missing_hand_pos: bool = False,
     verbose: bool = False,
@@ -858,6 +959,7 @@ def calc_score(
     peak_pre_max_frames = ms_to_frames(peak_pre_max_ms, frame_seconds)
     peak_post_max_frames = ms_to_frames(peak_post_max_ms, frame_seconds)
     peak_combine_frames = ms_to_frames(peak_combine_ms, frame_seconds)
+    event_label_window_frames = ms_to_frames(event_label_window_ms, frame_seconds)
     peak_smooth_arg = peak_smooth_frames if peak_smooth_frames > 1 else None
 
     model_path = os.path.join("model", trained_model, f"testNo{fold_id}", f"epoch{use_model_epoch}.model")
@@ -889,6 +991,10 @@ def calc_score(
         print(f"frame step: {frame_ms:.3f} ms")
         print(f"onset tolerance: +/- {float(onset_tolerance_ms):.1f} ms")
         print(f"event tolerance: +/- {float(event_tolerance_ms):.1f} ms")
+        print(f"event label window: +{float(event_label_window_ms):.1f} ms ({event_label_window_frames} frames)")
+        print(f"event tab threshold: {float(event_tab_threshold):.3f}")
+        print(f"event string threshold: {float(event_string_threshold):.3f}")
+        print(f"event string filter: {not bool(no_event_string_filter)}")
         print(f"onset threshold: {float(onset_threshold):.3f}")
         print(f"peak picking: {bool(use_peak_picking)}")
         if use_peak_picking:
@@ -957,14 +1063,24 @@ def calc_score(
             )
 
         with torch.no_grad():
-            frame_tab_score, frame_onset_logits, olens = model(
+            model_out = model(
                 input_features,
                 frame_len,
                 frame_hand_pos=frame_hand_pos,
             )
 
+        if len(model_out) == 4:
+            frame_tab_score, frame_onset_logits, global_onset_logits, olens = model_out
+        elif len(model_out) == 3:
+            # Backward compatibility with earlier BPM-free checkpoints.
+            frame_tab_score, frame_onset_logits, olens = model_out
+            global_onset_logits = None
+        else:
+            raise RuntimeError(f"Unexpected model output length: {len(model_out)}")
+
         pred_len = int(olens[0].item())
 
+        frame_tab_score_np = torch.squeeze(frame_tab_score, 0).detach().cpu().numpy().astype(np.float32)[:pred_len]
         frame_tab_pred = one_hot_argmax_tab(torch.squeeze(frame_tab_score, 0))[:pred_len]
         frame_onset_score_np = onset_scores_from_model_output(
             frame_onset_logits,
@@ -994,7 +1110,14 @@ def calc_score(
         frame_tab_gt = frame_tab_gt[:pred_len]
         frame_onset_gt = frame_onset_gt[:pred_len]
 
-        global_onset_score_np = np.max(frame_onset_score_np, axis=1)
+        if global_onset_logits is not None:
+            global_onset_score_np = global_onset_scores_from_model_output(
+                global_onset_logits,
+                onset_positive_class=int(onset_positive_class),
+            )[:pred_len]
+        else:
+            global_onset_score_np = np.max(frame_onset_score_np, axis=1)
+
         global_onset_gt = np.any(frame_onset_gt > 0, axis=1).astype(np.float32)
 
         if use_peak_picking:
@@ -1080,7 +1203,15 @@ def calc_score(
         # ------------------------------------------------------------------
         # Tolerant decoded note-event metrics: same string/fret, +/- event_tolerance_ms.
         # ------------------------------------------------------------------
-        pred_events = decode_events_from_tab_and_onset(frame_tab_pred, frame_onset_pred)
+        pred_events = decode_events_from_global_onsets_and_tab_window(
+            tab_scores=frame_tab_score_np,
+            global_onset_binary=global_onset_pred,
+            string_onset_scores=frame_onset_score_np,
+            label_window_frames=event_label_window_frames,
+            tab_threshold=float(event_tab_threshold),
+            string_threshold=float(event_string_threshold),
+            use_string_onset_filter=not bool(no_event_string_filter),
+        )
         gt_events = decode_events_from_tab_and_onset(frame_tab_gt, frame_onset_gt)
 
         event_p, event_r, event_f, event_tp, event_fp, event_fn = event_precision_recall_f1_tolerant(
@@ -1114,6 +1245,7 @@ def calc_score(
         np.savez_compressed(
             npz_save_filename,
             input_features=input_features_np,
+            frame_tab_pred_score=frame_tab_score_np,
             frame_tab_pred=frame_tab_pred,
             frame_tab_gt=frame_tab_gt,
             frame_onset_pred_score=frame_onset_score_np,
@@ -1127,6 +1259,10 @@ def calc_score(
             frame_seconds=np.asarray([frame_seconds], dtype=np.float32),
             onset_tolerance_ms=np.asarray([float(onset_tolerance_ms)], dtype=np.float32),
             event_tolerance_ms=np.asarray([float(event_tolerance_ms)], dtype=np.float32),
+            event_label_window_ms=np.asarray([float(event_label_window_ms)], dtype=np.float32),
+            event_tab_threshold=np.asarray([float(event_tab_threshold)], dtype=np.float32),
+            event_string_threshold=np.asarray([float(event_string_threshold)], dtype=np.float32),
+            no_event_string_filter=np.asarray([bool(no_event_string_filter)]),
             onset_threshold=np.asarray([float(onset_threshold)], dtype=np.float32),
             use_peak_picking=np.asarray([bool(use_peak_picking)]),
             peak_smooth_ms=np.asarray([float(peak_smooth_ms)], dtype=np.float32),
@@ -1187,6 +1323,10 @@ def calc_score(
             float(frame_ms),
             float(onset_tolerance_ms),
             float(event_tolerance_ms),
+            float(event_label_window_ms),
+            float(event_tab_threshold),
+            float(event_string_threshold),
+            float(no_event_string_filter),
             float(onset_threshold),
             float(use_peak_picking),
             float(peak_smooth_ms),
@@ -1246,6 +1386,10 @@ def calc_score(
             "frame_step_ms",
             "onset_tolerance_ms",
             "event_tolerance_ms",
+            "event_label_window_ms",
+            "event_tab_threshold",
+            "event_string_threshold",
+            "no_event_string_filter",
             "onset_threshold",
             "use_peak_picking",
             "peak_smooth_ms",
@@ -1452,6 +1596,33 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--event-label-window-ms",
+        type=float,
+        default=50.0,
+        help="Post-onset window used to choose fret/string from frame_tab, in ms. Default: +50 ms.",
+    )
+
+    parser.add_argument(
+        "--event-tab-threshold",
+        type=float,
+        default=0.50,
+        help="Minimum non-rest frame_tab probability needed to emit a note event. Default: 0.50.",
+    )
+
+    parser.add_argument(
+        "--event-string-threshold",
+        type=float,
+        default=0.30,
+        help="Minimum per-string onset probability near a global onset to emit that string. Default: 0.30.",
+    )
+
+    parser.add_argument(
+        "--no-event-string-filter",
+        action="store_true",
+        help="Decode event strings from frame_tab only; do not require per-string onset support.",
+    )
+
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -1519,6 +1690,10 @@ def main():
             peak_pre_max_ms=float(args.peak_pre_max_ms),
             peak_post_max_ms=float(args.peak_post_max_ms),
             peak_combine_ms=float(args.peak_combine_ms),
+            event_label_window_ms=float(args.event_label_window_ms),
+            event_tab_threshold=float(args.event_tab_threshold),
+            event_string_threshold=float(args.event_string_threshold),
+            no_event_string_filter=bool(args.no_event_string_filter),
             onset_positive_class=int(args.onset_positive_class),
             allow_missing_hand_pos=bool(args.allow_missing_hand_pos),
             verbose=bool(args.verbose),
@@ -1536,6 +1711,9 @@ def main():
     print("Saved metrics to:", csv_path)
     print(f"Onset tolerance: +/- {float(args.onset_tolerance_ms):.1f} ms")
     print(f"Event tolerance: +/- {float(args.event_tolerance_ms):.1f} ms")
+    print(f"Event label window: +{float(args.event_label_window_ms):.1f} ms")
+    print(f"Event tab threshold: {float(args.event_tab_threshold):.3f}")
+    print(f"Event string threshold: {float(args.event_string_threshold):.3f}")
     print(f"Peak picking: {not bool(args.no_peak_picking)}")
 
 
