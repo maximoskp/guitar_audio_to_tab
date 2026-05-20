@@ -30,6 +30,7 @@ It evaluates:
   3. onset-decoded note-event precision/recall/F1 over (time, string, fret)
      using global onset peaks for event timing and a short post-onset window
      for fret/string assignment; default note-event tolerance is +/-50 ms
+     A configurable label delay can skip unstable attack frames before reading fret/string labels.
 
 The old frame-exact onset scores are also saved as diagnostic columns:
     frame_exact_onset_*
@@ -669,6 +670,8 @@ def decode_events_from_global_onsets_and_tab_window(
     global_onset_binary: np.ndarray,
     string_onset_scores: Optional[np.ndarray] = None,
     label_window_frames: int = 2,
+    label_delay_frames: int = 0,
+    string_window_frames: Optional[int] = None,
     tab_threshold: float = 0.50,
     string_threshold: float = 0.30,
     use_string_onset_filter: bool = True,
@@ -677,9 +680,13 @@ def decode_events_from_global_onsets_and_tab_window(
     Decode note events from global onset timing and a short post-onset tab window.
 
     The global onset detector supplies event times. For each global onset frame t,
-    the decoder looks from t to t + label_window_frames and chooses the best
-    non-rest fret per string from frame_tab probabilities. Optionally, the
-    per-string onset head filters which strings are allowed to emit notes.
+    the decoder chooses fret/string labels from a short post-onset frame-tab window:
+
+        [t + label_delay_frames, t + label_delay_frames + label_window_frames]
+
+    The delay is useful because frame-tab predictions can be unstable exactly
+    at the noisy attack frame. Optionally, the per-string onset head filters
+    which strings are allowed to emit notes, using a separate string window.
 
     Returns events as tuples:
         (global_onset_frame, string_index_low_e_first, fret)
@@ -697,18 +704,26 @@ def decode_events_from_global_onsets_and_tab_window(
 
     T = min(tab_scores.shape[0], global_onset_binary.shape[0])
     label_window_frames = max(0, int(label_window_frames))
+    label_delay_frames = max(0, int(label_delay_frames))
+
+    if string_window_frames is None:
+        string_window_frames = label_window_frames
+    string_window_frames = max(0, int(string_window_frames))
+
     events: List[Tuple[int, int, int]] = []
 
     for t in np.where(global_onset_binary[:T])[0].tolist():
-        start = int(t)
-        end = min(T, start + label_window_frames + 1)
-        if end <= start:
+        label_start = min(T, int(t) + label_delay_frames)
+        label_end = min(T, label_start + label_window_frames + 1)
+        if label_end <= label_start:
             continue
 
-        tab_window = tab_scores[start:end, :, :REST_CLASS]
+        tab_window = tab_scores[label_start:label_end, :, :REST_CLASS]
 
         if string_onset_scores is not None:
-            onset_window = string_onset_scores[start:end, :]
+            string_start = int(t)
+            string_end = min(T, string_start + string_window_frames + 1)
+            onset_window = string_onset_scores[string_start:string_end, :]
         else:
             onset_window = None
 
@@ -927,7 +942,9 @@ def calc_score(
     peak_pre_max_ms: float = 50.0,
     peak_post_max_ms: float = 50.0,
     peak_combine_ms: float = 30.0,
+    event_label_delay_ms: float = 0.0,
     event_label_window_ms: float = 50.0,
+    event_string_window_ms: Optional[float] = None,
     event_tab_threshold: float = 0.50,
     event_string_threshold: float = 0.30,
     no_event_string_filter: bool = False,
@@ -959,7 +976,11 @@ def calc_score(
     peak_pre_max_frames = ms_to_frames(peak_pre_max_ms, frame_seconds)
     peak_post_max_frames = ms_to_frames(peak_post_max_ms, frame_seconds)
     peak_combine_frames = ms_to_frames(peak_combine_ms, frame_seconds)
+    event_label_delay_frames = ms_to_frames(event_label_delay_ms, frame_seconds)
     event_label_window_frames = ms_to_frames(event_label_window_ms, frame_seconds)
+    if event_string_window_ms is None:
+        event_string_window_ms = event_label_window_ms
+    event_string_window_frames = ms_to_frames(event_string_window_ms, frame_seconds)
     peak_smooth_arg = peak_smooth_frames if peak_smooth_frames > 1 else None
 
     model_path = os.path.join("model", trained_model, f"testNo{fold_id}", f"epoch{use_model_epoch}.model")
@@ -991,7 +1012,12 @@ def calc_score(
         print(f"frame step: {frame_ms:.3f} ms")
         print(f"onset tolerance: +/- {float(onset_tolerance_ms):.1f} ms")
         print(f"event tolerance: +/- {float(event_tolerance_ms):.1f} ms")
-        print(f"event label window: +{float(event_label_window_ms):.1f} ms ({event_label_window_frames} frames)")
+        print(
+            f"event label delay/window: +{float(event_label_delay_ms):.1f} ms / "
+            f"+{float(event_label_window_ms):.1f} ms "
+            f"({event_label_delay_frames} delay frames, {event_label_window_frames} window frames)"
+        )
+        print(f"event string window: +{float(event_string_window_ms):.1f} ms ({event_string_window_frames} frames)")
         print(f"event tab threshold: {float(event_tab_threshold):.3f}")
         print(f"event string threshold: {float(event_string_threshold):.3f}")
         print(f"event string filter: {not bool(no_event_string_filter)}")
@@ -1208,6 +1234,8 @@ def calc_score(
             global_onset_binary=global_onset_pred,
             string_onset_scores=frame_onset_score_np,
             label_window_frames=event_label_window_frames,
+            label_delay_frames=event_label_delay_frames,
+            string_window_frames=event_string_window_frames,
             tab_threshold=float(event_tab_threshold),
             string_threshold=float(event_string_threshold),
             use_string_onset_filter=not bool(no_event_string_filter),
@@ -1259,7 +1287,9 @@ def calc_score(
             frame_seconds=np.asarray([frame_seconds], dtype=np.float32),
             onset_tolerance_ms=np.asarray([float(onset_tolerance_ms)], dtype=np.float32),
             event_tolerance_ms=np.asarray([float(event_tolerance_ms)], dtype=np.float32),
+            event_label_delay_ms=np.asarray([float(event_label_delay_ms)], dtype=np.float32),
             event_label_window_ms=np.asarray([float(event_label_window_ms)], dtype=np.float32),
+            event_string_window_ms=np.asarray([float(event_string_window_ms)], dtype=np.float32),
             event_tab_threshold=np.asarray([float(event_tab_threshold)], dtype=np.float32),
             event_string_threshold=np.asarray([float(event_string_threshold)], dtype=np.float32),
             no_event_string_filter=np.asarray([bool(no_event_string_filter)]),
@@ -1318,12 +1348,25 @@ def calc_score(
         print(f"event_micro_p/r/f         = {event_micro_p:.4f}, {event_micro_r:.4f}, {event_micro_f:.4f}")
         print(f"event TP/FP/FN            = {event_sum_tp}, {event_sum_fp}, {event_sum_fn}")
 
+    # Always print the four headline metrics requested for quick terminal checks.
+    # Note: this BPM-free model has no legacy beat-grid note_pred output.
+    # Here note_avg_tab_f is an alias for onset-decoded note-event F1.
+    print()
+    print("Headline metrics")
+    print(f"frame_frame_avg_tab_f = {frame_concat_f:.4f}")
+    # print(f"note_avg_tab_f        = {event_avg_f:.4f}  # alias for onset-decoded event_avg_f")
+    print(f"frame_avg_onset_f     = {onset_avg_f:.4f}")
+    print(f"event_avg_f           = {event_avg_f:.4f}")
+    print()
+
     result = pd.DataFrame(
         [[
             float(frame_ms),
             float(onset_tolerance_ms),
             float(event_tolerance_ms),
+            float(event_label_delay_ms),
             float(event_label_window_ms),
+            float(event_string_window_ms),
             float(event_tab_threshold),
             float(event_string_threshold),
             float(no_event_string_filter),
@@ -1342,6 +1385,10 @@ def calc_score(
             frame_concat_p,
             frame_concat_r,
             frame_concat_f,
+
+            # Legacy-compatible aliases for terminal/table convenience.
+            frame_concat_f,  # frame_frame_avg_tab_f
+            event_avg_f,    # note_avg_tab_f: onset-decoded note-event F1, not legacy note_pred
 
             # Primary onset columns now use tolerant matching.
             onset_avg_p,
@@ -1386,7 +1433,9 @@ def calc_score(
             "frame_step_ms",
             "onset_tolerance_ms",
             "event_tolerance_ms",
+            "event_label_delay_ms",
             "event_label_window_ms",
+            "event_string_window_ms",
             "event_tab_threshold",
             "event_string_threshold",
             "no_event_string_filter",
@@ -1405,6 +1454,9 @@ def calc_score(
             "frame_concat_tab_p",
             "frame_concat_tab_r",
             "frame_concat_tab_f",
+
+            "frame_frame_avg_tab_f",
+            "note_avg_tab_f",
 
             "frame_avg_onset_p",
             "frame_avg_onset_r",
@@ -1596,10 +1648,30 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--event-label-delay-ms",
+        type=float,
+        default=0.0,
+        help=(
+            "Delay after each global onset before reading frame_tab labels, in ms. "
+            "Use ~20-25 ms to skip unstable attack frames. Default: 0 ms."
+        ),
+    )
+
+    parser.add_argument(
         "--event-label-window-ms",
         type=float,
         default=50.0,
-        help="Post-onset window used to choose fret/string from frame_tab, in ms. Default: +50 ms.",
+        help="Post-delay window used to choose fret/string from frame_tab, in ms. Default: +50 ms.",
+    )
+
+    parser.add_argument(
+        "--event-string-window-ms",
+        type=float,
+        default=None,
+        help=(
+            "Window after each global onset used for per-string onset support, in ms. "
+            "Default: same as --event-label-window-ms."
+        ),
     )
 
     parser.add_argument(
@@ -1690,7 +1762,9 @@ def main():
             peak_pre_max_ms=float(args.peak_pre_max_ms),
             peak_post_max_ms=float(args.peak_post_max_ms),
             peak_combine_ms=float(args.peak_combine_ms),
+            event_label_delay_ms=float(args.event_label_delay_ms),
             event_label_window_ms=float(args.event_label_window_ms),
+            event_string_window_ms=None if args.event_string_window_ms is None else float(args.event_string_window_ms),
             event_tab_threshold=float(args.event_tab_threshold),
             event_string_threshold=float(args.event_string_threshold),
             no_event_string_filter=bool(args.no_event_string_filter),
@@ -1711,7 +1785,10 @@ def main():
     print("Saved metrics to:", csv_path)
     print(f"Onset tolerance: +/- {float(args.onset_tolerance_ms):.1f} ms")
     print(f"Event tolerance: +/- {float(args.event_tolerance_ms):.1f} ms")
+    print(f"Event label delay: +{float(args.event_label_delay_ms):.1f} ms")
     print(f"Event label window: +{float(args.event_label_window_ms):.1f} ms")
+    event_string_window_print = args.event_string_window_ms if args.event_string_window_ms is not None else args.event_label_window_ms
+    print(f"Event string window: +{float(event_string_window_print):.1f} ms")
     print(f"Event tab threshold: {float(args.event_tab_threshold):.3f}")
     print(f"Event string threshold: {float(args.event_string_threshold):.3f}")
     print(f"Peak picking: {not bool(args.no_peak_picking)}")

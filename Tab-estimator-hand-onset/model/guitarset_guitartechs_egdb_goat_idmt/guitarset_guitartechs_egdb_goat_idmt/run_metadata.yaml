@@ -8,8 +8,8 @@ args:
   epoch: 192
   freeze_encoder: false
   freeze_frontend: false
-  global_onset_loss_weight: 0.5
-  global_onset_positive_weight: 5.0
+  global_onset_loss_weight: 0.25
+  global_onset_positive_weight: 10.0
   hand_hidden_gate_init: null
   hand_pos_dim: null
   hand_position_fusion: null
@@ -18,51 +18,51 @@ args:
   lr: null
   model_root: model
   n_cores: 1
-  n_folds: 6
+  n_folds: 7
   no_onset_raw_features: false
-  npz_dir: data/npz/guitarset_guitartechs_egdbm_handpos_clean/split
+  npz_dir: data/npz/guitarset_guitartechs_egdb_goat_idmt/split
   onset_dropout: 0.25
   onset_hidden_dim: 64
   onset_kernel_size: 3
   onset_loss_weight: 0.25
-  onset_positive_weight: 5.0
+  onset_positive_weight: 10.0
   onset_raw_dropout: 0.1
   onset_raw_proj_dim: 64
-  onset_target_mode: gaussian
+  onset_target_mode: hard
   onset_target_radius_ms: 25.0
   onset_tcn_levels: 4
   pin_memory: false
   pretrained_allow_partial: false
   pretrained_model: null
   quantized: false
-  run_name: guitarset_guitartechs_egdbm_handpos_onset
+  run_name: guitarset_guitartechs_egdb_goat_idmt
   save_every: 32
   seed: null
   tab_loss_weight: 1.0
   tensorboard_root: tensorboard
-  test_num: 0
-  use_hand_position: true
-base_model_dir: model/guitarset_guitartechs_egdbm_handpos_clean/guitarset_guitartechs_egdbm_handpos_onset
-base_tensorboard_dir: tensorboard/guitarset_guitartechs_egdbm_handpos_clean/guitarset_guitartechs_egdbm_handpos_onset
-data_path: data/npz/guitarset_guitartechs_egdbm_handpos_clean/split/*.npz
-global_onset_loss_weight: 0.5
-global_onset_positive_weight: 5.0
+  test_num: 6
+  use_hand_position: false
+base_model_dir: model/guitarset_guitartechs_egdb_goat_idmt/guitarset_guitartechs_egdb_goat_idmt
+base_tensorboard_dir: tensorboard/guitarset_guitartechs_egdb_goat_idmt/guitarset_guitartechs_egdb_goat_idmt
+data_path: data/npz/guitarset_guitartechs_egdb_goat_idmt/split/*.npz
+global_onset_loss_weight: 0.25
+global_onset_positive_weight: 10.0
 hand_pos_dim: 20
 hand_position_fusion: hidden+prior
 hand_prior_strength: 0.35
 hand_span: 4
-npz_dir: data/npz/guitarset_guitartechs_egdbm_handpos_clean/split
-num_npz_files: 3854
+npz_dir: data/npz/guitarset_guitartechs_egdb_goat_idmt/split
+num_npz_files: 5704
 onset_dropout: 0.25
 onset_head: noncausal_gated_tcn_encoder_plus_raw_features_per_string_and_global
 onset_hidden_dim: 64
 onset_input: encoder_states+projected_raw_features
 onset_kernel_size: 3
 onset_loss_weight: 0.25
-onset_positive_weight: 5.0
+onset_positive_weight: 10.0
 onset_raw_dropout: 0.1
 onset_raw_proj_dim: 64
-onset_target_mode: gaussian
+onset_target_mode: hard
 onset_target_radius_ms: 25.0
 onset_tcn_levels: 4
 onset_use_raw_features: true
@@ -70,8 +70,8 @@ outputs:
 - frame_tab_pred
 - frame_onset_pred
 - global_onset_pred
-run_name: guitarset_guitartechs_egdbm_handpos_onset
-run_tag: guitarset_guitartechs_egdbm_handpos_clean
-use_hand_position: true
+run_name: guitarset_guitartechs_egdb_goat_idmt
+run_tag: guitarset_guitartechs_egdb_goat_idmt
+use_hand_position: false
 uses_bpm: false
 uses_note_pred: false
