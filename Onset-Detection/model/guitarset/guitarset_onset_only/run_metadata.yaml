@@ -1,0 +1,65 @@
+architecture: audio_onset_detection
+args:
+  all_folds: false
+  batch_size: 32
+  config: src/config.yaml
+  dataset_dir: GuitarSet
+  device: null
+  epoch: 192
+  freeze_encoder: false
+  freeze_frontend: false
+  global_onset_loss_weight: 0.25
+  global_onset_positive_weight: 10.0
+  lr: null
+  model_root: model
+  n_cores: 1
+  n_folds: 6
+  no_onset_raw_features: false
+  npz_dir: data/npz/guitarset/split
+  onset_dropout: 0.25
+  onset_hidden_dim: 64
+  onset_input_mode: full
+  onset_kernel_size: 3
+  onset_loss_weight: 0.25
+  onset_positive_weight: 10.0
+  onset_raw_dropout: 0.1
+  onset_raw_proj_dim: 64
+  onset_target_mode: hard
+  onset_target_radius_ms: 25.0
+  onset_tcn_levels: 4
+  pin_memory: false
+  pretrained_allow_partial: false
+  pretrained_model: null
+  quantized: false
+  run_name: guitarset_onset_only
+  save_every: 32
+  seed: null
+  tensorboard_root: tensorboard
+  test_num: null
+base_model_dir: model/guitarset/guitarset_onset_only
+base_tensorboard_dir: tensorboard/guitarset/guitarset_onset_only
+data_path: data/npz/guitarset/split/*.npz
+global_onset_loss_weight: 0.25
+global_onset_positive_weight: 10.0
+npz_dir: data/npz/guitarset/split
+num_npz_files: 1320
+onset_dropout: 0.25
+onset_hidden_dim: 64
+onset_input_mode: full
+onset_kernel_size: 3
+onset_loss_weight: 0.25
+onset_positive_weight: 10.0
+onset_raw_dropout: 0.1
+onset_raw_proj_dim: 64
+onset_target_mode: hard
+onset_target_radius_ms: 25.0
+onset_tcn_levels: 4
+onset_use_raw_features: true
+outputs:
+- frame_onset_pred
+- global_onset_pred
+run_name: guitarset_onset_only
+run_tag: guitarset
+uses_bpm: false
+uses_hand_position: false
+uses_note_pred: false

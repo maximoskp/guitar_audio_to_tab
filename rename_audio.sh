@@ -23,6 +23,9 @@ rename_files() {
 # Rename in audio_DI
 rename_files "audio_DI" "DI"
 
+# Rename in audio_Ftwin
+rename_files "audio_Ftwin" "Ftwin"
+
 # Rename in audio_Marshall
 rename_files "audio_Marshall" "Marshall"
 
