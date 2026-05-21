@@ -77,7 +77,140 @@ def safe_run_name(s):
 
 
 # -----------------------------------------------------------------------------
-# Checkpoint helpers
+# Target-balanced audio-variant sampling helpers
+# -----------------------------------------------------------------------------
+
+
+def strip_npz_split_suffix(stem):
+    """
+    Convert:
+        00_BN1-129-Eb_comp_mic_00
+    into:
+        ("00_BN1-129-Eb_comp_mic", "00")
+
+    If there is no numeric final split suffix, returns:
+        (stem, None)
+    """
+    match = re.match(r"^(?P<base>.+)_(?P<split>\d+)$", str(stem))
+    if match:
+        return match.group("base"), match.group("split")
+    return str(stem), None
+
+
+def load_annotation_stems(annotation_dir):
+    """
+    Load known symbolic target stems from annotation/*.jams.
+
+    Example:
+        00_BN1-129-Eb_comp.jams
+    gives:
+        00_BN1-129-Eb_comp
+
+    Stems are sorted longest-first so prefix matching is safer when names overlap.
+    """
+    if not annotation_dir or not os.path.isdir(annotation_dir):
+        return []
+
+    stems = [
+        os.path.splitext(os.path.basename(path))[0]
+        for path in glob.glob(os.path.join(annotation_dir, "*.jams"))
+    ]
+
+    return sorted(set(stems), key=len, reverse=True)
+
+
+def fallback_strip_audio_variant_suffix(base_stem):
+    """
+    Fallback when annotation stems are unavailable.
+
+    Removes common audio/source/augmentation suffixes from an NPZ base stem.
+
+    Examples:
+        song_mic                       -> song
+        song_mix                       -> song
+        song_amp_mesa                  -> song
+        song_rev_small_room_01         -> song
+        song_mic_rev_hall_01           -> song
+    """
+    stem = str(base_stem)
+
+    changed = True
+    while changed:
+        changed = False
+
+        aug_patterns = [
+            r"^(?P<root>.+)_rev_.+$",
+            r"^(?P<root>.+)_reverb_.+$",
+            r"^(?P<root>.+)_aug_.+$",
+        ]
+
+        for pattern in aug_patterns:
+            match = re.match(pattern, stem)
+            if match:
+                stem = match.group("root")
+                changed = True
+
+        for suffix in [
+            "_mic",
+            "_mix",
+            "_pickup",
+            "_piezo",
+            "_di",
+            "_DI",
+            "_amp",
+            "_AMP",
+            "_clean",
+            "_raw",
+        ]:
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                changed = True
+                break
+
+    return stem
+
+
+def target_key_from_npz_path(npz_path, annotation_stems=None):
+    """
+    Return a target key shared by all audio versions of the same symbolic tab.
+
+    Examples:
+        00_BN1-129-Eb_comp_mic_03.npz
+        00_BN1-129-Eb_comp_mix_03.npz
+
+    both become:
+        00_BN1-129-Eb_comp_03
+
+    This keeps each split segment as a distinct target, but prevents mic/mix/amp
+    duplicates from over-weighting the same segment.
+    """
+    stem = os.path.splitext(os.path.basename(str(npz_path)))[0]
+    base, split_id = strip_npz_split_suffix(stem)
+
+    annotation_stems = annotation_stems or []
+
+    for ann_stem in annotation_stems:
+        if base == ann_stem or base.startswith(ann_stem + "_"):
+            return ann_stem if split_id is None else f"{ann_stem}_{split_id}"
+
+    root = fallback_strip_audio_variant_suffix(base)
+    return root if split_id is None else f"{root}_{split_id}"
+
+
+def group_npz_paths_by_target(data_list, annotation_stems=None):
+    groups = {}
+
+    for path in data_list:
+        key = target_key_from_npz_path(path, annotation_stems=annotation_stems)
+        groups.setdefault(key, []).append(path)
+
+    for key in groups:
+        groups[key] = sorted(groups[key])
+
+    return dict(sorted(groups.items()))
+
+
+# -----------------------------------------------------------------------------# Checkpoint helpers
 # -----------------------------------------------------------------------------
 
 
@@ -291,6 +424,9 @@ class FrameOnsetDataset(Dataset):
         onset_target_radius_frames=0,
         onset_target_mode="hard",
         onset_target_sigma_frames=1.0,
+        target_balanced_sampling=False,
+        annotation_stems=None,
+        audio_variant_sampling="random",
     ):
         self.data_list = list(data_list)
         self.input_feature_type = str(input_feature_type)
@@ -301,14 +437,55 @@ class FrameOnsetDataset(Dataset):
         self.onset_target_mode = str(onset_target_mode)
         self.onset_target_sigma_frames = float(onset_target_sigma_frames)
 
+        self.target_balanced_sampling = bool(target_balanced_sampling)
+        self.annotation_stems = list(annotation_stems or [])
+        self.audio_variant_sampling = str(audio_variant_sampling)
+
+        if self.audio_variant_sampling not in ["random", "first"]:
+            raise ValueError(
+                "audio_variant_sampling must be one of: random, first. "
+                f"Got {self.audio_variant_sampling!r}"
+            )
+
+        if self.target_balanced_sampling:
+            self.target_groups = group_npz_paths_by_target(
+                self.data_list,
+                annotation_stems=self.annotation_stems,
+            )
+            self.target_keys = sorted(self.target_groups.keys())
+
+            variant_counts = [len(v) for v in self.target_groups.values()]
+            print(
+                "[target-balanced dataset] files="
+                f"{len(self.data_list)} targets={len(self.target_keys)} "
+                f"mean_variants={np.mean(variant_counts):.2f} "
+                f"max_variants={np.max(variant_counts)} "
+                f"sampling={self.audio_variant_sampling}"
+            )
+        else:
+            self.target_groups = None
+            self.target_keys = None
+
     def __len__(self):
+        if self.target_balanced_sampling:
+            return len(self.target_keys)
         return len(self.data_list)
 
     def _missing_hand_pos(self, length):
         return np.ones((length, self.hand_pos_dim), dtype=np.float32) / float(self.hand_pos_dim)
 
     def __getitem__(self, index):
-        npz_path = self.data_list[index]
+        if self.target_balanced_sampling:
+            target_key = self.target_keys[index]
+            variants = self.target_groups[target_key]
+
+            if self.audio_variant_sampling == "first":
+                npz_path = variants[0]
+            else:
+                npz_path = random.choice(variants)
+        else:
+            npz_path = self.data_list[index]
+
         data = np.load(npz_path, allow_pickle=True)
 
         if self.input_feature_type == "cqt":
@@ -609,6 +786,7 @@ def train(
     valid_data_list,
     tensorboard_dir,
     model_dir,
+    annotation_stems=None,
 ):
     hop_length = int(config["hop_length"])
     sr = int(config["down_sampling_rate"])
@@ -708,6 +886,9 @@ def train(
             1.0,
             ms_to_frames(args.onset_target_radius_ms, hop_length=hop_length, sample_rate=sr) / 2.0,
         ),
+        target_balanced_sampling=bool(args.target_balanced_sampling),
+        annotation_stems=annotation_stems,
+        audio_variant_sampling="random",
     )
     valid_dataset = FrameOnsetDataset(
         valid_data_list,
@@ -725,6 +906,9 @@ def train(
             1.0,
             ms_to_frames(args.onset_target_radius_ms, hop_length=hop_length, sample_rate=sr) / 2.0,
         ),
+        target_balanced_sampling=bool(args.target_balanced_validation),
+        annotation_stems=annotation_stems,
+        audio_variant_sampling="first",
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -809,6 +993,35 @@ def parse_args():
     parser.add_argument("--device", default=None)
     parser.add_argument("--pin-memory", action="store_true")
 
+    parser.add_argument(
+        "--target-balanced-sampling",
+        action="store_true",
+        help=(
+            "Group NPZ files by symbolic target segment and sample one audio "
+            "variant per target per epoch. Prevents mic/mix/amp/reverb duplicates "
+            "from over-weighting the same tablature target."
+        ),
+    )
+
+    parser.add_argument(
+        "--target-balanced-validation",
+        action="store_true",
+        help=(
+            "Also balance validation by target segment. Validation uses the first "
+            "variant per target for stable validation loss."
+        ),
+    )
+
+    parser.add_argument(
+        "--annotation-dir",
+        default=None,
+        help=(
+            "Optional annotation directory containing .jams files. Used to infer "
+            "target IDs from annotation stems. Default: <dataset-dir>/annotation "
+            "if it exists."
+        ),
+    )
+
     parser.add_argument("--pretrained-model", default=None)
     parser.add_argument("--pretrained-allow-partial", action="store_true")
     parser.add_argument("--freeze-encoder", action="store_true")
@@ -861,6 +1074,18 @@ def main():
     if len(data_list) == 0:
         raise FileNotFoundError(f"No NPZ files found at: {os.path.join(npz_dir, '*.npz')}")
 
+    annotation_dir = args.annotation_dir
+    if annotation_dir is None:
+        candidate_annotation_dir = os.path.join(args.dataset_dir, "annotation")
+        annotation_dir = candidate_annotation_dir if os.path.isdir(candidate_annotation_dir) else None
+
+    annotation_stems = load_annotation_stems(annotation_dir)
+    if annotation_stems:
+        print("annotation_dir:", annotation_dir)
+        print("annotation stems:", len(annotation_stems))
+    else:
+        print("annotation_dir: none/fallback target-key parsing will be used")
+
     run_tag = npz_tag_from_path(npz_dir)
     run_name = safe_run_name(args.run_name) if args.run_name else datetime.datetime.now().strftime("%Y%m%d%H%M")
 
@@ -903,6 +1128,14 @@ def main():
         "onset_dropout": float(args.onset_dropout),
         "onset_kernel_size": int(args.onset_kernel_size),
         "onset_tcn_levels": int(args.onset_tcn_levels),
+        "target_balanced_sampling": bool(args.target_balanced_sampling),
+        "target_balanced_validation": bool(args.target_balanced_validation),
+        "annotation_dir": annotation_dir,
+        "num_annotation_stems": int(len(annotation_stems)),
+        "target_balanced_sampling_description": (
+            "When enabled, training samples symbolic target segments uniformly "
+            "and randomly chooses one audio variant for each target."
+        ),
         "args": vars(args),
     }
     with open(os.path.join(base_model_dir, "run_metadata.yaml"), "w", encoding="utf-8") as f:
@@ -957,6 +1190,7 @@ def main():
             valid_data_list=valid_data_list,
             tensorboard_dir=tensorboard_dir,
             model_dir=model_dir,
+            annotation_stems=annotation_stems,
         )
 
 
