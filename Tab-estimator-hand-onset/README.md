@@ -7,11 +7,20 @@ python src/predict.py guitarset/guitarset_onset_large_gloabel_lowerpweights 192 
 
 CUDA_VISIBLE_DEVICES=2 python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_handpos_onset_III   --use-hand-position   --test-num 6  --n-folds 7 --epoch 192
 
+[old]
 python src/predict.py  guitarset_guitartechs_egdb_goat_idmt_handpos_clean/guitarset_guitartechs_egdb_goat_idmt_handpos_onset_III 192 --test-num 06   --event-label-delay-ms 50   --event-label-window-ms 50   --event-string-window-ms 70 --onset-threshold 0.80 --n-folds 7 --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split
-
 frame_frame_avg_tab_f = 0.7039
 frame_avg_onset_f     = 0.6314
 event_avg_f           = 0.7693
+
+[new]
+python src/predict.py   guitarset_guitartechs_egdb_goat_idmt_handpos_clean/guitarset_guitartechs_egdb_goat_idmt_handpos_onset_III   192   --test-num 6   --n-folds 7   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split   --event-decode-mode string_onset   --event-chord-group-ms 55   --event-label-delay-ms 20   --event-label-window-ms 90   --event-string-window-ms 50   --event-tab-threshold 0.30   --onset-threshold 0.80   --global-onset-threshold 0.80   --peak-pre-max-ms 30   --peak-post-max-ms 30   --peak-combine-ms 30   --use-global-onset-fallback   --global-fallback-max-notes 2   --repeat-same-fret-policy strong_onset   --min-repeat-ms 250   --repeat-onset-threshold 0.94   --repeat-global-threshold 0.75   --same-string-any-fret-min-ms 80
+Test No. 06
+Headline metrics
+frame_frame_avg_tab_f = 0.7039
+frame_avg_onset_f     = 0.6164
+event_avg_f           = 0.7551
+
 
 -----------------
 
@@ -105,6 +114,98 @@ python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt/sp
 
 python src/predict.py  guitarset_guitartechs_egdb_goat_idmt/guitarset_guitartechs_egdb_goat_idmt_onset 192 --test-num 06  --onset-threshold 0.80 --n-folds 7 --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt/split
 
+---------------------------
+
+python src/train.py \
+  --npz-dir data/npz/guitarset_guitartechs_egdb_reverb_aug_handpos_clean/split \
+  --run-name guitarset_guitartechs_egdb_reverb_aug_handpos_clean \
+  --target-balanced-sampling \
+  --target-balanced-validation \
+  --use-hand-position \
+  --hand-position-fusion hidden+prior \
+  --test-num 6 \
+  --n-folds 7 \
+  --epoch 192
+
+python src/predict.py  guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean//guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/ 192 --test-num 06  --onset-threshold 0.85 --n-folds 7 --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt/split  --event-label-delay-ms 50   --event-label-window-ms 50   --event-string-window-ms 70
+Headline metrics
+frame_frame_avg_tab_f = 0.6722
+frame_avg_onset_f     = 0.5917
+event_avg_f           = 0.7286
+
+
+--------------------------------------------- [important-unused]
+CUDA_VISIBLE_DEVICES=1 python src/train.py   --npz-dir data/npz/guitarsetmicmix_egdbamps_guitartechs_goat_idmt_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_onset_handpos_clean  --target-balanced-sampling  --target-balanced-sampling  --use-hand-position   --hand-position-fusion hidden+prior   --test-num 6   --n-folds 8   --epoch 192
+
+
+
+
+-------------------------------------------
+
+# Ablations
+
+<!-- no hand-fused onset -->
+CUDA_VISIBLE_DEVICES=0 python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_reverb_aug_no_handfused_onset  --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion prior   --test-num 6   --n-folds 7   --epoch 192
+
+<!-- no hand at all-->
+CUDA_VISIBLE_DEVICES=2 python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_reverb_aug_no_hand   --target-balanced-sampling   --target-balanced-validation    --test-num 6   --n-folds 7   --epoch 192
+
+
+python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos   --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion hidden+prior   --test-num 6   --n-folds 7   --epoch 192
+
+<!-- no raw onset stream-->
+CUDA_VISIBLE_DEVICES=3 python src/train.py   --npz-dir data/npz/guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/split   --run-name guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_no_rawcqt_for_onset   --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion hidden+prior   --test-num 6   --n-folds 7   --epoch 192 --no-onset-raw-features
+
+
+--------------------------
+# Guitarset
+
+
+CUDA_VISIBLE_DEVICES=0 python src/train.py   --npz-dir data/npz/guitarset_handpos_clean/split   --run-name guitarset   --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion prior   --n-folds 6   --epoch 192
+
+CUDA_VISIBLE_DEVICES=2 python src/train.py   --npz-dir data/npz/guitarset/split   --run-name guitarset   --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion prior   --n-folds 6   --epoch 192
+
+<!-- COMPACT -->
+
+Compact audio-visual frame/onset model
+
+audio waveform
+      |
+      v
+CQT features
+X : B x T x 192
+      |
+      +-------------------------+
+      |                         |
+      v                         v
+raw onset projection       ConvStack + Conformer
+192 -> 64                  192 -> 512
+      |                         |
+      v                         v
+R : B x T' x 64            A : B x T' x 512
+                                |
+H : B x T' x 25                |
+hand fret prior                 |
+      |                         |
+      v                         v
+hand projection ----------> fusion
+                          Z : B x T' x 512
+                                |
+      +-------------------------+-------------------------+
+      |                                                   |
+      v                                                   v
+Frame-tab head                                      Onset heads
+Linear + softmax                                    concat [Z ; R]
+      |                                             4-layer gated TCN
+      v                                                   |
+P : B x T' x 6 x 21                       +---------------+---------------+
+string/fret/rest probs                    |                               |
+                                           v                               v
+                                    global onset g                  per-string onset S
+                                    B x T'                          B x T' x 6
+
+
+-----------------------------
 Audio-visual encoder + prediction heads
 
 audio waveform

@@ -28,8 +28,9 @@ It evaluates:
   2. onset precision/recall/F1 over note starts on (time, string)
      using a tolerant matching window, default +/-25 ms
   3. onset-decoded note-event precision/recall/F1 over (time, string, fret)
-     using global onset peaks for event timing and a short post-onset window
-     for fret/string assignment; default note-event tolerance is +/-50 ms
+     using a backend-style string-onset decoder by default: per-string onset peaks
+     define event timing, and frame-tab probabilities are read in a delayed
+     post-onset label window; default note-event tolerance is +/-50 ms
      A configurable label delay can skip unstable attack frames before reading fret/string labels.
 
 The old frame-exact onset scores are also saved as diagnostic columns:
@@ -139,6 +140,69 @@ def binary_tab_flat_no_rest(tab_one_hot: np.ndarray) -> np.ndarray:
         (T, 6, 21) -> (T * 6 * 20,)
     """
     return np.asarray(tab_one_hot[:, :, :REST_CLASS]).flatten()
+
+
+# Low-E-first string index used internally by this script:
+#   0 = low E, 1 = A, 2 = D, 3 = G, 4 = B, 5 = high e
+LOW_E_FIRST_STRING_BASE_MIDI = {
+    0: 40,
+    1: 45,
+    2: 50,
+    3: 55,
+    4: 59,
+    5: 64,
+}
+
+
+def binary_true_positives(pred: np.ndarray, gt: np.ndarray) -> int:
+    pred = np.asarray(pred) > 0
+    gt = np.asarray(gt) > 0
+    return int(np.logical_and(pred, gt).sum())
+
+
+def safe_ratio(num: float, den: float) -> float:
+    return float(num) / float(den) if float(den) > 0 else 0.0
+
+
+def tab_to_pitch_binary(tab_one_hot: np.ndarray, n_midi: int = 128) -> np.ndarray:
+    """
+    Convert a frame-level tablature grid to a frame-level pitch grid.
+
+    Input:
+        tab_one_hot: (T, 6, 21), low-E-first string axis, rest class excluded.
+
+    Output:
+        pitch_binary: (T, 128), where each active pitch is marked once per frame.
+    """
+    tab_one_hot = np.asarray(tab_one_hot)
+    classes = np.argmax(tab_one_hot, axis=2).astype(np.int64)
+    out = np.zeros((classes.shape[0], int(n_midi)), dtype=np.float32)
+
+    for t in range(classes.shape[0]):
+        for s in range(6):
+            fret = int(classes[t, s])
+            if fret < 0 or fret >= REST_CLASS:
+                continue
+            midi = LOW_E_FIRST_STRING_BASE_MIDI[int(s)] + fret
+            if 0 <= midi < int(n_midi):
+                out[t, midi] = 1.0
+
+    return out
+
+
+def binary_pitch_flat(tab_one_hot: np.ndarray) -> np.ndarray:
+    return tab_to_pitch_binary(tab_one_hot).flatten()
+
+
+def event_pitch(event: Tuple[int, int, int]) -> Optional[int]:
+    try:
+        _t, s, fret = event
+        base = LOW_E_FIRST_STRING_BASE_MIDI.get(int(s))
+        if base is None:
+            return None
+        return int(base + int(fret))
+    except Exception:
+        return None
 
 
 def frame_seconds_from_config(config: Dict[str, Any]) -> float:
@@ -747,6 +811,233 @@ def decode_events_from_global_onsets_and_tab_window(
     return events
 
 
+
+
+def _max_score_in_frame_window_1d(scores: np.ndarray, center: int, radius_frames: int) -> float:
+    x = np.asarray(scores, dtype=np.float32).reshape(-1)
+    if x.size == 0:
+        return 0.0
+    center = int(center)
+    radius_frames = max(0, int(radius_frames))
+    a = max(0, center - radius_frames)
+    b = min(x.shape[0], center + radius_frames + 1)
+    if b <= a:
+        return 0.0
+    return float(np.max(x[a:b]))
+
+
+def _event_exists_near(events: Sequence[Tuple[int, int, int]], frame: int, radius_frames: int, string_idx: Optional[int] = None) -> bool:
+    radius_frames = max(0, int(radius_frames))
+    for et, es, _ef in events:
+        if string_idx is not None and int(es) != int(string_idx):
+            continue
+        if abs(int(et) - int(frame)) <= radius_frames:
+            return True
+    return False
+
+
+def _select_best_active_fret_in_window(
+    tab_scores: np.ndarray,
+    onset_frame: int,
+    string_idx: int,
+    label_delay_frames: int,
+    label_window_frames: int,
+) -> Optional[Tuple[int, int, float]]:
+    """
+    Select the most confident active fret class on one string inside the
+    delayed post-onset label window. The rest class is excluded.
+
+    Returns:
+        (selected_frame, selected_fret, confidence) or None.
+    """
+    tab_scores = np.asarray(tab_scores, dtype=np.float32)
+    T = tab_scores.shape[0]
+    start = min(T, int(onset_frame) + max(0, int(label_delay_frames)))
+    end = min(T, start + max(0, int(label_window_frames)) + 1)
+    if end <= start:
+        return None
+
+    # Active fret classes only: 0..REST_CLASS-1.
+    window = tab_scores[start:end, int(string_idx), :REST_CLASS]
+    if window.size == 0:
+        return None
+
+    flat_idx = int(np.argmax(window))
+    local_t, fret = np.unravel_index(flat_idx, window.shape)
+    score = float(window[local_t, fret])
+    return int(start + local_t), int(fret), score
+
+
+def decode_events_backend_like(
+    tab_scores: np.ndarray,
+    string_onset_binary: np.ndarray,
+    string_onset_scores: np.ndarray,
+    global_onset_binary: np.ndarray,
+    global_onset_scores: np.ndarray,
+    event_decode_mode: str = "string_onset",
+    label_window_frames: int = 2,
+    label_delay_frames: int = 0,
+    tab_threshold: float = 0.50,
+    event_chord_group_frames: int = 1,
+    use_global_onset_confirmation: bool = False,
+    global_confirm_window_frames: int = 2,
+    global_onset_threshold: float = 0.80,
+    use_global_onset_fallback: bool = False,
+    global_fallback_max_notes: int = 1,
+    repeat_same_fret_policy: str = "tab_change_or_strong_onset",
+    min_repeat_frames: int = 4,
+    repeat_onset_threshold: float = 0.90,
+    repeat_global_threshold: float = 0.65,
+    require_global_for_repeats: bool = True,
+    same_string_any_fret_min_frames: int = 1,
+) -> List[Tuple[int, int, int]]:
+    """
+    Backend-style hard event decoder for NPZ evaluation.
+
+    Main mode used for the video endpoint preset:
+      - string_onset: per-string onset peaks define event times.
+      - global onset peaks are optional auxiliary evidence for fallback recovery.
+
+    Returns events as tuples:
+      (frame_index, string_index_low_e_first, fret)
+    """
+    tab_scores = np.asarray(tab_scores, dtype=np.float32)
+    string_onset_binary = np.asarray(string_onset_binary, dtype=np.float32)
+    string_onset_scores = np.asarray(string_onset_scores, dtype=np.float32)
+    global_onset_binary = np.asarray(global_onset_binary, dtype=np.float32).reshape(-1)
+    global_onset_scores = np.asarray(global_onset_scores, dtype=np.float32).reshape(-1)
+
+    if tab_scores.ndim != 3 or tab_scores.shape[1] != 6 or tab_scores.shape[2] < REST_CLASS + 1:
+        raise ValueError(f"Expected tab_scores shape (T, 6, 21), got {tab_scores.shape}")
+    if string_onset_scores.ndim != 2 or string_onset_scores.shape[1] != 6:
+        raise ValueError(f"Expected string_onset_scores shape (T, 6), got {string_onset_scores.shape}")
+
+    T = min(tab_scores.shape[0], string_onset_binary.shape[0], string_onset_scores.shape[0], global_onset_binary.shape[0], global_onset_scores.shape[0])
+    events: List[Tuple[int, int, int]] = []
+    event_scores: List[float] = []
+
+    event_decode_mode = str(event_decode_mode)
+    if event_decode_mode not in {"string_onset", "global_onset", "hybrid"}:
+        raise ValueError(f"Unknown event_decode_mode: {event_decode_mode}")
+
+    def near_global_ok(t: int, threshold: float, window_frames: int) -> bool:
+        return _max_score_in_frame_window_1d(global_onset_scores[:T], t, window_frames) >= float(threshold)
+
+    def should_keep_event(t: int, s: int, fret: int) -> bool:
+        # Suppress very-near events on the same string, regardless of fret.
+        if _event_exists_near(events, t, same_string_any_fret_min_frames, string_idx=s):
+            return False
+
+        # Same string/fret repeat handling.
+        recent_same = [idx for idx, (et, es, ef) in enumerate(events) if int(es) == int(s) and int(ef) == int(fret) and 0 <= int(t) - int(et) <= int(min_repeat_frames)]
+        if not recent_same:
+            return True
+
+        policy = str(repeat_same_fret_policy)
+        if policy == "off":
+            return True
+        if policy == "refractory":
+            return False
+
+        strong_string = float(string_onset_scores[min(max(int(t), 0), T - 1), int(s)]) >= float(repeat_onset_threshold)
+        strong_global = near_global_ok(t, repeat_global_threshold, global_confirm_window_frames)
+        strong = strong_string and ((not bool(require_global_for_repeats)) or strong_global)
+
+        if policy in {"strong_onset", "tab_change_or_strong_onset"}:
+            return bool(strong)
+
+        return True
+
+    def append_candidate(t: int, s: int, fret: int, score: float) -> None:
+        if score < float(tab_threshold):
+            return
+        if not should_keep_event(t, s, fret):
+            return
+        events.append((int(t), int(s), int(fret)))
+        event_scores.append(float(score))
+
+    # ------------------------------------------------------------------
+    # Primary per-string onset timing.
+    # ------------------------------------------------------------------
+    if event_decode_mode in {"string_onset", "hybrid"}:
+        peak_t, peak_s = np.nonzero(string_onset_binary[:T, :] > 0)
+        order = np.argsort(peak_t)
+        for idx in order.tolist():
+            t = int(peak_t[idx])
+            s = int(peak_s[idx])
+
+            if use_global_onset_confirmation and not near_global_ok(t, global_onset_threshold, global_confirm_window_frames):
+                continue
+
+            best = _select_best_active_fret_in_window(
+                tab_scores=tab_scores[:T],
+                onset_frame=t,
+                string_idx=s,
+                label_delay_frames=label_delay_frames,
+                label_window_frames=label_window_frames,
+            )
+            if best is None:
+                continue
+            _tau, fret, score = best
+            append_candidate(t, s, fret, score)
+
+    # ------------------------------------------------------------------
+    # Global-onset primary mode, mostly for backward-compatible experiments.
+    # ------------------------------------------------------------------
+    if event_decode_mode == "global_onset":
+        global_frames = np.where(global_onset_binary[:T] > 0)[0].tolist()
+        for g in global_frames:
+            candidates = []
+            for s in range(6):
+                best = _select_best_active_fret_in_window(
+                    tab_scores=tab_scores[:T],
+                    onset_frame=int(g),
+                    string_idx=s,
+                    label_delay_frames=label_delay_frames,
+                    label_window_frames=label_window_frames,
+                )
+                if best is None:
+                    continue
+                _tau, fret, score = best
+                if score >= float(tab_threshold):
+                    candidates.append((float(score), int(s), int(fret)))
+            candidates.sort(reverse=True)
+            for score, s, fret in candidates[:max(1, int(global_fallback_max_notes))]:
+                append_candidate(int(g), int(s), int(fret), float(score))
+
+    # ------------------------------------------------------------------
+    # Auxiliary global fallback: recover missing strings near strong global peaks.
+    # ------------------------------------------------------------------
+    if event_decode_mode in {"string_onset", "hybrid"} and bool(use_global_onset_fallback):
+        K = max(0, int(global_fallback_max_notes))
+        if K > 0:
+            global_frames = np.where(global_onset_binary[:T] > 0)[0].tolist()
+            for g in global_frames:
+                represented = {int(es) for et, es, _ef in events if abs(int(et) - int(g)) <= max(0, int(event_chord_group_frames))}
+                candidates = []
+                for s in range(6):
+                    if s in represented:
+                        continue
+                    best = _select_best_active_fret_in_window(
+                        tab_scores=tab_scores[:T],
+                        onset_frame=int(g),
+                        string_idx=s,
+                        label_delay_frames=label_delay_frames,
+                        label_window_frames=label_window_frames,
+                    )
+                    if best is None:
+                        continue
+                    _tau, fret, score = best
+                    if score >= float(tab_threshold):
+                        candidates.append((float(score), int(s), int(fret)))
+                candidates.sort(reverse=True)
+                for score, s, fret in candidates[:K]:
+                    append_candidate(int(g), int(s), int(fret), float(score))
+
+    # Stable ordering for hard matching.
+    events = sorted(set(events), key=lambda x: (x[0], x[1], x[2]))
+    return events
+
 def tolerant_onset_precision_recall_f1(
     pred_onset_binary: np.ndarray,
     gt_onset_binary: np.ndarray,
@@ -920,6 +1211,289 @@ def event_precision_recall_f1_tolerant(
     return precision, recall, f1, int(tp), int(fp), int(fn)
 
 
+def event_pitch_precision_recall_f1_tolerant(
+    pred_events: Sequence[Tuple[int, int, int]],
+    gt_events: Sequence[Tuple[int, int, int]],
+    frame_seconds: float,
+    tolerance_seconds: float,
+) -> Tuple[float, float, float, int, int, int]:
+    """
+    Note-event pitch matching.
+
+    A predicted note event is correct if:
+        - same pitch, ignoring string/fret spelling
+        - absolute onset-time difference <= tolerance_seconds
+    """
+    if len(pred_events) == 0 and len(gt_events) == 0:
+        return 1.0, 1.0, 1.0, 0, 0, 0
+
+    if len(pred_events) == 0:
+        return 0.0, 0.0, 0.0, 0, 0, int(len(gt_events))
+
+    if len(gt_events) == 0:
+        return 0.0, 0.0, 0.0, 0, int(len(pred_events)), 0
+
+    gt_pitch_events = []
+    for gt_idx, (gt, gs, gf) in enumerate(gt_events):
+        p = event_pitch((gt, gs, gf))
+        if p is not None:
+            gt_pitch_events.append((gt_idx, int(gt), int(p)))
+
+    used_gt = set()
+    tp = 0
+
+    for pt, ps, pf in sorted(pred_events):
+        pp = event_pitch((pt, ps, pf))
+        if pp is None:
+            continue
+
+        best_idx = None
+        best_dt = None
+
+        for gt_idx, gt, gp in gt_pitch_events:
+            if gt_idx in used_gt:
+                continue
+            if int(pp) != int(gp):
+                continue
+
+            dt = abs(float(pt - gt) * float(frame_seconds))
+            if dt <= tolerance_seconds:
+                if best_dt is None or dt < best_dt:
+                    best_idx = gt_idx
+                    best_dt = dt
+
+        if best_idx is not None:
+            used_gt.add(best_idx)
+            tp += 1
+
+    fp = len(pred_events) - tp
+    fn = len(gt_events) - tp
+    precision, recall, f1 = prf_from_counts(tp, fp, fn)
+    return precision, recall, f1, int(tp), int(fp), int(fn)
+
+
+
+def events_to_notation_sonorities(
+    events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> List[frozenset]:
+    """
+    Convert onset-decoded events into an onset-ordered notation sequence.
+
+    Each output token is a sonority represented as a frozenset of
+    (string_index_low_e_first, fret) pairs. Events whose onset frames are close
+    enough are grouped into the same sonority/chord. Durations and inter-onset
+    timing are intentionally discarded, so this is a notation-level note/chord
+    sequence rather than an onset/rhythm metric.
+    """
+    chord_group_frames = max(0, int(chord_group_frames))
+    clean_events = sorted(
+        (int(t), int(s), int(f)) for t, s, f in events if 0 <= int(f) < REST_CLASS
+    )
+
+    if not clean_events:
+        return []
+
+    sonorities: List[frozenset] = []
+    current_anchor = clean_events[0][0]
+    current_notes = set()
+
+    for t, s, fret in clean_events:
+        if current_notes and (int(t) - int(current_anchor)) > chord_group_frames:
+            sonorities.append(frozenset(current_notes))
+            current_anchor = int(t)
+            current_notes = set()
+        current_notes.add((int(s), int(fret)))
+
+    if current_notes:
+        sonorities.append(frozenset(current_notes))
+
+    return sonorities
+
+
+def sonority_substitution_cost(a: frozenset, b: frozenset) -> int:
+    """
+    Cost for replacing one chord/sonority with another.
+
+    This uses max(missing, extra), so one wrong note in an otherwise correct
+    chord costs 1, and the distance is normalized safely by the larger total
+    number of notes in either sequence.
+    """
+    missing = len(set(a) - set(b))
+    extra = len(set(b) - set(a))
+    return int(max(missing, extra))
+
+
+def notation_edit_distance(
+    pred_sonorities: Sequence[frozenset],
+    gt_sonorities: Sequence[frozenset],
+) -> int:
+    """
+    Weighted Levenshtein distance over sequences of notation sonorities.
+
+    Insertion/deletion costs are the number of notes in the inserted/deleted
+    sonority. Substitution cost is a set-difference chord cost. This compares
+    symbolic string/fret content and chord order while ignoring durations and
+    rhythmic spacing.
+    """
+    n = len(pred_sonorities)
+    m = len(gt_sonorities)
+
+    dp = np.zeros((n + 1, m + 1), dtype=np.int64)
+
+    for i in range(1, n + 1):
+        dp[i, 0] = dp[i - 1, 0] + len(pred_sonorities[i - 1])
+
+    for j in range(1, m + 1):
+        dp[0, j] = dp[0, j - 1] + len(gt_sonorities[j - 1])
+
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            pred_tok = pred_sonorities[i - 1]
+            gt_tok = gt_sonorities[j - 1]
+            sub_cost = sonority_substitution_cost(pred_tok, gt_tok)
+            dp[i, j] = min(
+                dp[i - 1, j] + len(pred_tok),
+                dp[i, j - 1] + len(gt_tok),
+                dp[i - 1, j - 1] + sub_cost,
+            )
+
+    return int(dp[n, m])
+
+
+def notation_edit_similarity(
+    pred_events: Sequence[Tuple[int, int, int]],
+    gt_events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> Tuple[float, int, int, int, int, int]:
+    """
+    Notation-level edit similarity for tablature events.
+
+    Returns:
+        similarity, distance, normalizer, pred_sonority_count,
+        gt_sonority_count, matched_note_capacity
+
+    similarity = 1 - distance / max(total_pred_notes, total_gt_notes).
+    Empty prediction and empty reference give similarity 1.0.
+    """
+    pred_seq = events_to_notation_sonorities(pred_events, chord_group_frames=chord_group_frames)
+    gt_seq = events_to_notation_sonorities(gt_events, chord_group_frames=chord_group_frames)
+
+    pred_notes = int(sum(len(x) for x in pred_seq))
+    gt_notes = int(sum(len(x) for x in gt_seq))
+    normalizer = max(pred_notes, gt_notes)
+
+    if normalizer == 0:
+        return 1.0, 0, 0, len(pred_seq), len(gt_seq), 0
+
+    distance = notation_edit_distance(pred_seq, gt_seq)
+    similarity = 1.0 - (float(distance) / float(normalizer))
+    similarity = max(0.0, min(1.0, similarity))
+    matched_note_capacity = max(0, int(normalizer - distance))
+
+    return (
+        float(similarity),
+        int(distance),
+        int(normalizer),
+        int(len(pred_seq)),
+        int(len(gt_seq)),
+        int(matched_note_capacity),
+    )
+
+
+
+def events_to_pitch_sonorities(
+    events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> List[frozenset]:
+    """
+    Convert onset-decoded events into an onset-ordered pitch sonority sequence.
+
+    Each output token is a frozenset of MIDI pitches. Events whose onset frames
+    are close enough are grouped into the same sonority/chord. String/fret
+    spelling is discarded, so enharmonic string choices that produce the same
+    MIDI pitch are treated as equivalent.
+    """
+    chord_group_frames = max(0, int(chord_group_frames))
+
+    clean_events = []
+    for t, s, fret in events:
+        if not (0 <= int(fret) < REST_CLASS):
+            continue
+        pitch = event_pitch((int(t), int(s), int(fret)))
+        if pitch is None:
+            continue
+        clean_events.append((int(t), int(pitch)))
+
+    clean_events = sorted(clean_events, key=lambda x: (x[0], x[1]))
+
+    if not clean_events:
+        return []
+
+    sonorities: List[frozenset] = []
+    current_anchor = clean_events[0][0]
+    current_pitches = set()
+
+    for t, pitch in clean_events:
+        if current_pitches and (int(t) - int(current_anchor)) > chord_group_frames:
+            sonorities.append(frozenset(current_pitches))
+            current_anchor = int(t)
+            current_pitches = set()
+        current_pitches.add(int(pitch))
+
+    if current_pitches:
+        sonorities.append(frozenset(current_pitches))
+
+    return sonorities
+
+
+def pitch_notation_edit_similarity(
+    pred_events: Sequence[Tuple[int, int, int]],
+    gt_events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> Tuple[float, int, int, int, int, int]:
+    """
+    Pitch-level edit similarity for onset-ordered note/chord sequences.
+
+    This is parallel to notation_edit_similarity(), but it compares sonorities
+    of MIDI pitches rather than sonorities of string-fret pairs. It therefore
+    measures sequence-level pitch correctness while ignoring tablature spelling.
+
+    Returns:
+        similarity, distance, normalizer, pred_sonority_count,
+        gt_sonority_count, matched_note_capacity
+
+    similarity = 1 - distance / max(total_pred_notes, total_gt_notes).
+    Empty prediction and empty reference give similarity 1.0.
+    """
+    pred_seq = events_to_pitch_sonorities(pred_events, chord_group_frames=chord_group_frames)
+    gt_seq = events_to_pitch_sonorities(gt_events, chord_group_frames=chord_group_frames)
+
+    pred_notes = int(sum(len(x) for x in pred_seq))
+    gt_notes = int(sum(len(x) for x in gt_seq))
+    normalizer = max(pred_notes, gt_notes)
+
+    if normalizer == 0:
+        return 1.0, 0, 0, len(pred_seq), len(gt_seq), 0
+
+    # The same weighted Levenshtein distance is valid here because tokens are
+    # also frozensets; only the token content changed from (string, fret) pairs
+    # to MIDI pitches.
+    distance = notation_edit_distance(pred_seq, gt_seq)
+    similarity = 1.0 - (float(distance) / float(normalizer))
+    similarity = max(0.0, min(1.0, similarity))
+    matched_note_capacity = max(0, int(normalizer - distance))
+
+    return (
+        float(similarity),
+        int(distance),
+        int(normalizer),
+        int(len(pred_seq)),
+        int(len(gt_seq)),
+        int(matched_note_capacity),
+    )
+
+
 # -----------------------------------------------------------------------------
 # Main scoring
 # -----------------------------------------------------------------------------
@@ -933,7 +1507,9 @@ def calc_score(
     npz_dir: str,
     device: str = "cpu",
     onset_threshold: float = 0.5,
-    onset_tolerance_ms: float = 25.0,
+    global_onset_threshold: float = 0.8,
+    # onset_tolerance_ms: float = 25.0,
+    onset_tolerance_ms: float = 50.0,
     event_tolerance_ms: float = 50.0,
     use_peak_picking: bool = True,
     peak_smooth_ms: float = 0.0,
@@ -948,6 +1524,18 @@ def calc_score(
     event_tab_threshold: float = 0.50,
     event_string_threshold: float = 0.30,
     no_event_string_filter: bool = False,
+    event_decode_mode: str = "string_onset",
+    event_chord_group_ms: float = 55.0,
+    use_global_onset_confirmation: bool = False,
+    global_confirm_window_ms: float = 40.0,
+    use_global_onset_fallback: bool = False,
+    global_fallback_max_notes: int = 1,
+    repeat_same_fret_policy: str = "strong_onset",
+    min_repeat_ms: float = 250.0,
+    repeat_onset_threshold: float = 0.94,
+    repeat_global_threshold: float = 0.75,
+    require_global_for_repeats: bool = True,
+    same_string_any_fret_min_ms: float = 80.0,
     onset_positive_class: int = 1,
     allow_missing_hand_pos: bool = False,
     verbose: bool = False,
@@ -981,6 +1569,10 @@ def calc_score(
     if event_string_window_ms is None:
         event_string_window_ms = event_label_window_ms
     event_string_window_frames = ms_to_frames(event_string_window_ms, frame_seconds)
+    event_chord_group_frames = ms_to_frames(event_chord_group_ms, frame_seconds)
+    global_confirm_window_frames = ms_to_frames(global_confirm_window_ms, frame_seconds)
+    min_repeat_frames = ms_to_frames(min_repeat_ms, frame_seconds)
+    same_string_any_fret_min_frames = ms_to_frames(same_string_any_fret_min_ms, frame_seconds)
     peak_smooth_arg = peak_smooth_frames if peak_smooth_frames > 1 else None
 
     model_path = os.path.join("model", trained_model, f"testNo{fold_id}", f"epoch{use_model_epoch}.model")
@@ -1018,6 +1610,12 @@ def calc_score(
             f"({event_label_delay_frames} delay frames, {event_label_window_frames} window frames)"
         )
         print(f"event string window: +{float(event_string_window_ms):.1f} ms ({event_string_window_frames} frames)")
+        print(f"event decode mode: {event_decode_mode}")
+        print(f"event chord group: {float(event_chord_group_ms):.1f} ms ({event_chord_group_frames} frames)")
+        print(f"global onset threshold: {float(global_onset_threshold):.3f}")
+        print(f"global onset fallback: {bool(use_global_onset_fallback)} max_notes={int(global_fallback_max_notes)}")
+        print(f"global onset confirmation: {bool(use_global_onset_confirmation)} window={float(global_confirm_window_ms):.1f} ms")
+        print(f"repeat policy: {repeat_same_fret_policy}, min_repeat={float(min_repeat_ms):.1f} ms, require_global={bool(require_global_for_repeats)}")
         print(f"event tab threshold: {float(event_tab_threshold):.3f}")
         print(f"event string threshold: {float(event_string_threshold):.3f}")
         print(f"event string filter: {not bool(no_event_string_filter)}")
@@ -1037,6 +1635,12 @@ def calc_score(
     frame_concat_pred = np.array([], dtype=np.float32)
     frame_concat_gt = np.array([], dtype=np.float32)
 
+    # Dense frame-pitch metrics and TabEstimator-style TDR.
+    frame_pitch_sum_p = frame_pitch_sum_r = frame_pitch_sum_f = 0.0
+    frame_tdr_sum = 0.0
+    frame_concat_pitch_pred = np.array([], dtype=np.float32)
+    frame_concat_pitch_gt = np.array([], dtype=np.float32)
+
     # Frame-exact onset diagnostics.
     exact_onset_sum_p = exact_onset_sum_r = exact_onset_sum_f = 0.0
     exact_onset_concat_pred = np.array([], dtype=np.float32)
@@ -1053,6 +1657,27 @@ def calc_score(
     # Tolerant note-event metrics.
     event_sum_p = event_sum_r = event_sum_f = 0.0
     event_sum_tp = event_sum_fp = event_sum_fn = 0
+
+    # Tolerant note-event pitch metrics and TabEstimator-style TDR.
+    event_pitch_sum_p = event_pitch_sum_r = event_pitch_sum_f = 0.0
+    event_tdr_sum = 0.0
+    event_pitch_sum_tp = event_pitch_sum_fp = event_pitch_sum_fn = 0
+
+    # Notation-level edit-distance metrics over onset-ordered sonority/chord sequences.
+    notation_edit_similarity_sum = 0.0
+    notation_edit_distance_sum = 0
+    notation_edit_normalizer_sum = 0
+    notation_edit_pred_sonorities_sum = 0
+    notation_edit_gt_sonorities_sum = 0
+    notation_edit_matched_capacity_sum = 0
+
+    # Pitch-level edit-distance metrics over onset-ordered pitch sonority/chord sequences.
+    pitch_notation_edit_similarity_sum = 0.0
+    pitch_notation_edit_distance_sum = 0
+    pitch_notation_edit_normalizer_sum = 0
+    pitch_notation_edit_pred_sonorities_sum = 0
+    pitch_notation_edit_gt_sonorities_sum = 0
+    pitch_notation_edit_matched_capacity_sum = 0
 
     for npz_filename in tqdm.tqdm(test_data_list):
         npz_file = np.load(npz_filename, allow_pickle=True)
@@ -1149,7 +1774,7 @@ def calc_score(
         if use_peak_picking:
             global_onset_pred = peak_pick_binary_from_scores(
                 global_onset_score_np,
-                threshold=float(onset_threshold),
+                threshold=float(global_onset_threshold),
                 smooth=peak_smooth_arg,
                 pre_avg=peak_pre_avg_frames,
                 post_avg=peak_post_avg_frames,
@@ -1158,7 +1783,7 @@ def calc_score(
                 combine_frames=peak_combine_frames,
             )
         else:
-            global_onset_pred = threshold_binary_from_scores(global_onset_score_np, float(onset_threshold))
+            global_onset_pred = threshold_binary_from_scores(global_onset_score_np, float(global_onset_threshold))
 
         # ------------------------------------------------------------------
         # Dense frame-tab metrics.
@@ -1174,6 +1799,24 @@ def calc_score(
 
         frame_concat_pred = np.concatenate((frame_concat_pred, frame_pred_flat), axis=None)
         frame_concat_gt = np.concatenate((frame_concat_gt, frame_gt_flat), axis=None)
+
+        # Dense frame-pitch metrics.
+        frame_pitch_pred_flat = binary_pitch_flat(frame_tab_pred)
+        frame_pitch_gt_flat = binary_pitch_flat(frame_tab_gt)
+        frame_pitch_p, frame_pitch_r, frame_pitch_f = calculate_binary_metrics(
+            frame_pitch_pred_flat,
+            frame_pitch_gt_flat,
+        )
+        frame_pitch_sum_p += frame_pitch_p
+        frame_pitch_sum_r += frame_pitch_r
+        frame_pitch_sum_f += frame_pitch_f
+
+        frame_tab_tp = binary_true_positives(frame_pred_flat, frame_gt_flat)
+        frame_pitch_tp = binary_true_positives(frame_pitch_pred_flat, frame_pitch_gt_flat)
+        frame_tdr_sum += safe_ratio(frame_tab_tp, frame_pitch_tp)
+
+        frame_concat_pitch_pred = np.concatenate((frame_concat_pitch_pred, frame_pitch_pred_flat), axis=None)
+        frame_concat_pitch_gt = np.concatenate((frame_concat_pitch_gt, frame_pitch_gt_flat), axis=None)
 
         # ------------------------------------------------------------------
         # Frame-exact onset diagnostic metrics.
@@ -1229,16 +1872,28 @@ def calc_score(
         # ------------------------------------------------------------------
         # Tolerant decoded note-event metrics: same string/fret, +/- event_tolerance_ms.
         # ------------------------------------------------------------------
-        pred_events = decode_events_from_global_onsets_and_tab_window(
+        pred_events = decode_events_backend_like(
             tab_scores=frame_tab_score_np,
-            global_onset_binary=global_onset_pred,
+            string_onset_binary=frame_onset_pred,
             string_onset_scores=frame_onset_score_np,
+            global_onset_binary=global_onset_pred,
+            global_onset_scores=global_onset_score_np,
+            event_decode_mode=str(event_decode_mode),
             label_window_frames=event_label_window_frames,
             label_delay_frames=event_label_delay_frames,
-            string_window_frames=event_string_window_frames,
             tab_threshold=float(event_tab_threshold),
-            string_threshold=float(event_string_threshold),
-            use_string_onset_filter=not bool(no_event_string_filter),
+            event_chord_group_frames=event_chord_group_frames,
+            use_global_onset_confirmation=bool(use_global_onset_confirmation),
+            global_confirm_window_frames=global_confirm_window_frames,
+            global_onset_threshold=float(global_onset_threshold),
+            use_global_onset_fallback=bool(use_global_onset_fallback),
+            global_fallback_max_notes=int(global_fallback_max_notes),
+            repeat_same_fret_policy=str(repeat_same_fret_policy),
+            min_repeat_frames=min_repeat_frames,
+            repeat_onset_threshold=float(repeat_onset_threshold),
+            repeat_global_threshold=float(repeat_global_threshold),
+            require_global_for_repeats=bool(require_global_for_repeats),
+            same_string_any_fret_min_frames=same_string_any_fret_min_frames,
         )
         gt_events = decode_events_from_tab_and_onset(frame_tab_gt, frame_onset_gt)
 
@@ -1249,12 +1904,55 @@ def calc_score(
             tolerance_seconds=event_tolerance_seconds,
         )
 
+        event_pitch_p, event_pitch_r, event_pitch_f, event_pitch_tp, event_pitch_fp, event_pitch_fn = (
+            event_pitch_precision_recall_f1_tolerant(
+                pred_events,
+                gt_events,
+                frame_seconds=frame_seconds,
+                tolerance_seconds=event_tolerance_seconds,
+            )
+        )
+
+        event_tdr = safe_ratio(event_tp, event_pitch_tp)
+
         event_sum_p += event_p
         event_sum_r += event_r
         event_sum_f += event_f
         event_sum_tp += event_tp
         event_sum_fp += event_fp
         event_sum_fn += event_fn
+
+        event_pitch_sum_p += event_pitch_p
+        event_pitch_sum_r += event_pitch_r
+        event_pitch_sum_f += event_pitch_f
+        event_pitch_sum_tp += event_pitch_tp
+        event_pitch_sum_fp += event_pitch_fp
+        event_pitch_sum_fn += event_pitch_fn
+        event_tdr_sum += event_tdr
+
+        notation_edit_similarity_value, notation_edit_distance_value, notation_edit_normalizer_value, notation_pred_sonorities, notation_gt_sonorities, notation_matched_capacity = notation_edit_similarity(
+            pred_events,
+            gt_events,
+            chord_group_frames=event_chord_group_frames,
+        )
+        notation_edit_similarity_sum += notation_edit_similarity_value
+        notation_edit_distance_sum += notation_edit_distance_value
+        notation_edit_normalizer_sum += notation_edit_normalizer_value
+        notation_edit_pred_sonorities_sum += notation_pred_sonorities
+        notation_edit_gt_sonorities_sum += notation_gt_sonorities
+        notation_edit_matched_capacity_sum += notation_matched_capacity
+
+        pitch_notation_edit_similarity_value, pitch_notation_edit_distance_value, pitch_notation_edit_normalizer_value, pitch_notation_pred_sonorities, pitch_notation_gt_sonorities, pitch_notation_matched_capacity = pitch_notation_edit_similarity(
+            pred_events,
+            gt_events,
+            chord_group_frames=event_chord_group_frames,
+        )
+        pitch_notation_edit_similarity_sum += pitch_notation_edit_similarity_value
+        pitch_notation_edit_distance_sum += pitch_notation_edit_distance_value
+        pitch_notation_edit_normalizer_sum += pitch_notation_edit_normalizer_value
+        pitch_notation_edit_pred_sonorities_sum += pitch_notation_pred_sonorities
+        pitch_notation_edit_gt_sonorities_sum += pitch_notation_gt_sonorities
+        pitch_notation_edit_matched_capacity_sum += pitch_notation_matched_capacity
 
         # ------------------------------------------------------------------
         # Save per-file predictions.
@@ -1284,6 +1982,20 @@ def calc_score(
             global_onset_gt=global_onset_gt,
             pred_events=np.asarray(pred_events, dtype=np.int64) if pred_events else np.zeros((0, 3), dtype=np.int64),
             gt_events=np.asarray(gt_events, dtype=np.int64) if gt_events else np.zeros((0, 3), dtype=np.int64),
+            event_pitch_p=np.asarray([float(event_pitch_p)], dtype=np.float32),
+            event_pitch_r=np.asarray([float(event_pitch_r)], dtype=np.float32),
+            event_pitch_f=np.asarray([float(event_pitch_f)], dtype=np.float32),
+            event_tdr=np.asarray([float(event_tdr)], dtype=np.float32),
+            notation_edit_similarity=np.asarray([float(notation_edit_similarity_value)], dtype=np.float32),
+            notation_edit_distance=np.asarray([int(notation_edit_distance_value)], dtype=np.int64),
+            notation_edit_normalizer=np.asarray([int(notation_edit_normalizer_value)], dtype=np.int64),
+            notation_pred_sonorities=np.asarray([int(notation_pred_sonorities)], dtype=np.int64),
+            notation_gt_sonorities=np.asarray([int(notation_gt_sonorities)], dtype=np.int64),
+            pitch_notation_edit_similarity=np.asarray([float(pitch_notation_edit_similarity_value)], dtype=np.float32),
+            pitch_notation_edit_distance=np.asarray([int(pitch_notation_edit_distance_value)], dtype=np.int64),
+            pitch_notation_edit_normalizer=np.asarray([int(pitch_notation_edit_normalizer_value)], dtype=np.int64),
+            pitch_notation_pred_sonorities=np.asarray([int(pitch_notation_pred_sonorities)], dtype=np.int64),
+            pitch_notation_gt_sonorities=np.asarray([int(pitch_notation_gt_sonorities)], dtype=np.int64),
             frame_seconds=np.asarray([frame_seconds], dtype=np.float32),
             onset_tolerance_ms=np.asarray([float(onset_tolerance_ms)], dtype=np.float32),
             event_tolerance_ms=np.asarray([float(event_tolerance_ms)], dtype=np.float32),
@@ -1294,6 +2006,19 @@ def calc_score(
             event_string_threshold=np.asarray([float(event_string_threshold)], dtype=np.float32),
             no_event_string_filter=np.asarray([bool(no_event_string_filter)]),
             onset_threshold=np.asarray([float(onset_threshold)], dtype=np.float32),
+            global_onset_threshold=np.asarray([float(global_onset_threshold)], dtype=np.float32),
+            event_decode_mode=np.asarray([str(event_decode_mode)]),
+            event_chord_group_ms=np.asarray([float(event_chord_group_ms)], dtype=np.float32),
+            use_global_onset_confirmation=np.asarray([bool(use_global_onset_confirmation)]),
+            global_confirm_window_ms=np.asarray([float(global_confirm_window_ms)], dtype=np.float32),
+            use_global_onset_fallback=np.asarray([bool(use_global_onset_fallback)]),
+            global_fallback_max_notes=np.asarray([int(global_fallback_max_notes)], dtype=np.int64),
+            repeat_same_fret_policy=np.asarray([str(repeat_same_fret_policy)]),
+            min_repeat_ms=np.asarray([float(min_repeat_ms)], dtype=np.float32),
+            repeat_onset_threshold=np.asarray([float(repeat_onset_threshold)], dtype=np.float32),
+            repeat_global_threshold=np.asarray([float(repeat_global_threshold)], dtype=np.float32),
+            require_global_for_repeats=np.asarray([bool(require_global_for_repeats)]),
+            same_string_any_fret_min_ms=np.asarray([float(same_string_any_fret_min_ms)], dtype=np.float32),
             use_peak_picking=np.asarray([bool(use_peak_picking)]),
             peak_smooth_ms=np.asarray([float(peak_smooth_ms)], dtype=np.float32),
             peak_pre_avg_ms=np.asarray([float(peak_pre_avg_ms)], dtype=np.float32),
@@ -1309,6 +2034,19 @@ def calc_score(
     frame_avg_r = frame_sum_r / n_files
     frame_avg_f = frame_sum_f / n_files
     frame_concat_p, frame_concat_r, frame_concat_f = calculate_binary_metrics(frame_concat_pred, frame_concat_gt)
+
+    frame_pitch_avg_p = frame_pitch_sum_p / n_files
+    frame_pitch_avg_r = frame_pitch_sum_r / n_files
+    frame_pitch_avg_f = frame_pitch_sum_f / n_files
+    frame_avg_tdr = frame_tdr_sum / n_files
+    frame_pitch_concat_p, frame_pitch_concat_r, frame_pitch_concat_f = calculate_binary_metrics(
+        frame_concat_pitch_pred,
+        frame_concat_pitch_gt,
+    )
+    frame_concat_tdr = safe_ratio(
+        binary_true_positives(frame_concat_pred, frame_concat_gt),
+        binary_true_positives(frame_concat_pitch_pred, frame_concat_pitch_gt),
+    )
 
     exact_onset_avg_p = exact_onset_sum_p / n_files
     exact_onset_avg_r = exact_onset_sum_r / n_files
@@ -1337,26 +2075,71 @@ def calc_score(
     event_avg_f = event_sum_f / n_files
     event_micro_p, event_micro_r, event_micro_f = prf_from_counts(event_sum_tp, event_sum_fp, event_sum_fn)
 
+    event_pitch_avg_p = event_pitch_sum_p / n_files
+    event_pitch_avg_r = event_pitch_sum_r / n_files
+    event_pitch_avg_f = event_pitch_sum_f / n_files
+    event_pitch_micro_p, event_pitch_micro_r, event_pitch_micro_f = prf_from_counts(
+        event_pitch_sum_tp,
+        event_pitch_sum_fp,
+        event_pitch_sum_fn,
+    )
+    event_avg_tdr = event_tdr_sum / n_files
+    event_micro_tdr = safe_ratio(event_sum_tp, event_pitch_sum_tp)
+
+    notation_edit_avg_similarity = notation_edit_similarity_sum / n_files
+    notation_edit_micro_similarity = (
+        1.0 - safe_ratio(notation_edit_distance_sum, notation_edit_normalizer_sum)
+        if notation_edit_normalizer_sum > 0
+        else 1.0
+    )
+    notation_edit_micro_similarity = max(0.0, min(1.0, float(notation_edit_micro_similarity)))
+
+    pitch_notation_edit_avg_similarity = pitch_notation_edit_similarity_sum / n_files
+    pitch_notation_edit_micro_similarity = (
+        1.0 - safe_ratio(pitch_notation_edit_distance_sum, pitch_notation_edit_normalizer_sum)
+        if pitch_notation_edit_normalizer_sum > 0
+        else 1.0
+    )
+    pitch_notation_edit_micro_similarity = max(0.0, min(1.0, float(pitch_notation_edit_micro_similarity)))
+
     if verbose:
         print(f"frame_avg_tab_p/r/f       = {frame_avg_p:.4f}, {frame_avg_r:.4f}, {frame_avg_f:.4f}")
+        print(f"frame_avg_pitch_p/r/f     = {frame_pitch_avg_p:.4f}, {frame_pitch_avg_r:.4f}, {frame_pitch_avg_f:.4f}")
+        print(f"frame_avg_tdr             = {frame_avg_tdr:.4f}")
         print(f"exact_onset_avg_p/r/f     = {exact_onset_avg_p:.4f}, {exact_onset_avg_r:.4f}, {exact_onset_avg_f:.4f}")
         print(f"tolerant_onset_avg_p/r/f        = {onset_avg_p:.4f}, {onset_avg_r:.4f}, {onset_avg_f:.4f}")
         print(f"tolerant_onset_micro_p/r/f      = {onset_micro_p:.4f}, {onset_micro_r:.4f}, {onset_micro_f:.4f}")
         print(f"global_onset_avg_p/r/f          = {global_onset_avg_p:.4f}, {global_onset_avg_r:.4f}, {global_onset_avg_f:.4f}")
         print(f"global_onset_micro_p/r/f        = {global_onset_micro_p:.4f}, {global_onset_micro_r:.4f}, {global_onset_micro_f:.4f}")
         print(f"event_avg_p/r/f                 = {event_avg_p:.4f}, {event_avg_r:.4f}, {event_avg_f:.4f}")
+        print(f"event_pitch_avg_p/r/f           = {event_pitch_avg_p:.4f}, {event_pitch_avg_r:.4f}, {event_pitch_avg_f:.4f}")
+        print(f"event_avg_tdr                   = {event_avg_tdr:.4f}")
         print(f"event_micro_p/r/f         = {event_micro_p:.4f}, {event_micro_r:.4f}, {event_micro_f:.4f}")
+        print(f"event_pitch_micro_p/r/f   = {event_pitch_micro_p:.4f}, {event_pitch_micro_r:.4f}, {event_pitch_micro_f:.4f}")
+        print(f"event_micro_tdr           = {event_micro_tdr:.4f}")
+        print(f"notation_edit_avg_similarity   = {notation_edit_avg_similarity:.4f}")
+        print(f"notation_edit_micro_similarity = {notation_edit_micro_similarity:.4f}")
+        print(f"notation edit distance/normalizer = {notation_edit_distance_sum}, {notation_edit_normalizer_sum}")
+        print(f"pitch_notation_edit_avg_similarity   = {pitch_notation_edit_avg_similarity:.4f}")
+        print(f"pitch_notation_edit_micro_similarity = {pitch_notation_edit_micro_similarity:.4f}")
+        print(f"pitch notation edit distance/normalizer = {pitch_notation_edit_distance_sum}, {pitch_notation_edit_normalizer_sum}")
         print(f"event TP/FP/FN            = {event_sum_tp}, {event_sum_fp}, {event_sum_fn}")
+        print(f"event pitch TP/FP/FN      = {event_pitch_sum_tp}, {event_pitch_sum_fp}, {event_pitch_sum_fn}")
 
     # Always print the four headline metrics requested for quick terminal checks.
     # Note: this BPM-free model has no legacy beat-grid note_pred output.
     # Here note_avg_tab_f is an alias for onset-decoded note-event F1.
     print()
     print("Headline metrics")
-    print(f"frame_frame_avg_tab_f = {frame_concat_f:.4f}")
-    # print(f"note_avg_tab_f        = {event_avg_f:.4f}  # alias for onset-decoded event_avg_f")
-    print(f"frame_avg_onset_f     = {onset_avg_f:.4f}")
-    print(f"event_avg_f           = {event_avg_f:.4f}")
+    print(f"frame_frame_avg_tab_f   = {frame_concat_f:.4f}")
+    print(f"frame_frame_avg_pitch_f = {frame_pitch_concat_f:.4f}")
+    print(f"frame_tdr               = {frame_concat_tdr:.4f}")
+    print(f"frame_avg_onset_f       = {onset_avg_f:.4f}")
+    print(f"event_avg_f             = {event_avg_f:.4f}")
+    print(f"event_pitch_avg_f       = {event_pitch_avg_f:.4f}")
+    print(f"event_avg_tdr           = {event_avg_tdr:.4f}")
+    print(f"notation_edit_avg_sim   = {notation_edit_avg_similarity:.4f}")
+    print(f"pitch_notation_edit_avg_sim = {pitch_notation_edit_avg_similarity:.4f}")
     print()
 
     result = pd.DataFrame(
@@ -1371,6 +2154,19 @@ def calc_score(
             float(event_string_threshold),
             float(no_event_string_filter),
             float(onset_threshold),
+            float(global_onset_threshold),
+            str(event_decode_mode),
+            float(event_chord_group_ms),
+            float(use_global_onset_confirmation),
+            float(global_confirm_window_ms),
+            float(use_global_onset_fallback),
+            float(global_fallback_max_notes),
+            str(repeat_same_fret_policy),
+            float(min_repeat_ms),
+            float(repeat_onset_threshold),
+            float(repeat_global_threshold),
+            float(require_global_for_repeats),
+            float(same_string_any_fret_min_ms),
             float(use_peak_picking),
             float(peak_smooth_ms),
             float(peak_pre_avg_ms),
@@ -1385,6 +2181,14 @@ def calc_score(
             frame_concat_p,
             frame_concat_r,
             frame_concat_f,
+            frame_pitch_avg_p,
+            frame_pitch_avg_r,
+            frame_pitch_avg_f,
+            frame_pitch_concat_p,
+            frame_pitch_concat_r,
+            frame_pitch_concat_f,
+            frame_avg_tdr,
+            frame_concat_tdr,
 
             # Legacy-compatible aliases for terminal/table convenience.
             frame_concat_f,  # frame_frame_avg_tab_f
@@ -1428,6 +2232,31 @@ def calc_score(
             event_sum_tp,
             event_sum_fp,
             event_sum_fn,
+            event_pitch_avg_p,
+            event_pitch_avg_r,
+            event_pitch_avg_f,
+            event_pitch_micro_p,
+            event_pitch_micro_r,
+            event_pitch_micro_f,
+            event_pitch_sum_tp,
+            event_pitch_sum_fp,
+            event_pitch_sum_fn,
+            event_avg_tdr,
+            event_micro_tdr,
+            notation_edit_avg_similarity,
+            notation_edit_micro_similarity,
+            notation_edit_distance_sum,
+            notation_edit_normalizer_sum,
+            notation_edit_pred_sonorities_sum,
+            notation_edit_gt_sonorities_sum,
+            notation_edit_matched_capacity_sum,
+            pitch_notation_edit_avg_similarity,
+            pitch_notation_edit_micro_similarity,
+            pitch_notation_edit_distance_sum,
+            pitch_notation_edit_normalizer_sum,
+            pitch_notation_edit_pred_sonorities_sum,
+            pitch_notation_edit_gt_sonorities_sum,
+            pitch_notation_edit_matched_capacity_sum,
         ]],
         columns=[
             "frame_step_ms",
@@ -1440,6 +2269,19 @@ def calc_score(
             "event_string_threshold",
             "no_event_string_filter",
             "onset_threshold",
+            "global_onset_threshold",
+            "event_decode_mode",
+            "event_chord_group_ms",
+            "use_global_onset_confirmation",
+            "global_confirm_window_ms",
+            "use_global_onset_fallback",
+            "global_fallback_max_notes",
+            "repeat_same_fret_policy",
+            "min_repeat_ms",
+            "repeat_onset_threshold",
+            "repeat_global_threshold",
+            "require_global_for_repeats",
+            "same_string_any_fret_min_ms",
             "use_peak_picking",
             "peak_smooth_ms",
             "peak_pre_avg_ms",
@@ -1454,6 +2296,14 @@ def calc_score(
             "frame_concat_tab_p",
             "frame_concat_tab_r",
             "frame_concat_tab_f",
+            "frame_avg_pitch_p",
+            "frame_avg_pitch_r",
+            "frame_avg_pitch_f",
+            "frame_concat_pitch_p",
+            "frame_concat_pitch_r",
+            "frame_concat_pitch_f",
+            "frame_avg_tdr",
+            "frame_concat_tdr",
 
             "frame_frame_avg_tab_f",
             "note_avg_tab_f",
@@ -1494,6 +2344,31 @@ def calc_score(
             "event_tp",
             "event_fp",
             "event_fn",
+            "event_pitch_avg_p",
+            "event_pitch_avg_r",
+            "event_pitch_avg_f",
+            "event_pitch_micro_p",
+            "event_pitch_micro_r",
+            "event_pitch_micro_f",
+            "event_pitch_tp",
+            "event_pitch_fp",
+            "event_pitch_fn",
+            "event_avg_tdr",
+            "event_micro_tdr",
+            "notation_edit_avg_similarity",
+            "notation_edit_micro_similarity",
+            "notation_edit_distance",
+            "notation_edit_normalizer",
+            "notation_edit_pred_sonorities",
+            "notation_edit_gt_sonorities",
+            "notation_edit_matched_capacity",
+            "pitch_notation_edit_avg_similarity",
+            "pitch_notation_edit_micro_similarity",
+            "pitch_notation_edit_distance",
+            "pitch_notation_edit_normalizer",
+            "pitch_notation_edit_pred_sonorities",
+            "pitch_notation_edit_gt_sonorities",
+            "pitch_notation_edit_matched_capacity",
         ],
         index=[f"No{fold_id}"],
     )
@@ -1579,6 +2454,106 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--global-onset-threshold",
+        type=float,
+        default=0.8,
+        help="Threshold for sigmoid(global_onset_logits). Default: 0.8.",
+    )
+
+    parser.add_argument(
+        "--event-decode-mode",
+        choices=["string_onset", "global_onset", "hybrid"],
+        default="string_onset",
+        help="Event decoder mode. Use string_onset to match the video endpoint preset.",
+    )
+
+    parser.add_argument(
+        "--event-chord-group-ms",
+        type=float,
+        default=55.0,
+        help="Neighborhood for treating nearby events as the same chord/global fallback group. Default: 55 ms.",
+    )
+
+    parser.add_argument(
+        "--use-global-onset-confirmation",
+        "--use-global-onset-conf",
+        dest="use_global_onset_confirmation",
+        action="store_true",
+        default=False,
+        help="Require nearby global-onset support for per-string onset events.",
+    )
+
+    parser.add_argument(
+        "--global-confirm-window-ms",
+        type=float,
+        default=40.0,
+        help="Window for optional global-onset confirmation. Default: 40 ms.",
+    )
+
+    parser.add_argument(
+        "--use-global-onset-fallback",
+        action="store_true",
+        default=False,
+        help="Use strong global onsets to recover missing string-fret events.",
+    )
+
+    parser.add_argument(
+        "--global-fallback-max-notes",
+        type=int,
+        default=1,
+        help="Maximum fallback events per global onset. Default: 1.",
+    )
+
+    parser.add_argument(
+        "--repeat-same-fret-policy",
+        choices=["off", "refractory", "strong_onset", "tab_change_or_strong_onset"],
+        default="strong_onset",
+        help="Policy for suppressing/allowing repeated same-string same-fret events.",
+    )
+
+    parser.add_argument(
+        "--min-repeat-ms",
+        type=float,
+        default=250.0,
+        help="Minimum time for same-string same-fret repeats unless strong onset policy allows it.",
+    )
+
+    parser.add_argument(
+        "--repeat-onset-threshold",
+        type=float,
+        default=0.94,
+        help="Per-string onset threshold used to allow repeated same-fret events.",
+    )
+
+    parser.add_argument(
+        "--repeat-global-threshold",
+        type=float,
+        default=0.75,
+        help="Global onset threshold used to allow repeated same-fret events.",
+    )
+
+    parser.add_argument(
+        "--require-global-for-repeats",
+        action="store_true",
+        default=True,
+        help="Require global onset support when allowing repeated same-fret events. Default: true.",
+    )
+
+    parser.add_argument(
+        "--no-require-global-for-repeats",
+        dest="require_global_for_repeats",
+        action="store_false",
+        help="Do not require global onset support for repeated same-fret events.",
+    )
+
+    parser.add_argument(
+        "--same-string-any-fret-min-ms",
+        type=float,
+        default=80.0,
+        help="Suppress any two events on the same string closer than this many ms. Default: 80 ms.",
+    )
+
+    parser.add_argument(
         "--no-peak-picking",
         action="store_true",
         help="Disable Madmom-style peak-picking and use simple thresholding instead.",
@@ -1636,7 +2611,7 @@ def parse_args():
     parser.add_argument(
         "--onset-tolerance-ms",
         type=float,
-        default=25.0,
+        default=50.0,
         help="Tolerant onset matching window in milliseconds. Default: +/-25 ms.",
     )
 
@@ -1753,6 +2728,7 @@ def main():
             npz_dir=npz_dir,
             device=str(args.device),
             onset_threshold=float(args.onset_threshold),
+            global_onset_threshold=float(args.global_onset_threshold),
             onset_tolerance_ms=float(args.onset_tolerance_ms),
             event_tolerance_ms=float(args.event_tolerance_ms),
             use_peak_picking=not bool(args.no_peak_picking),
@@ -1768,6 +2744,18 @@ def main():
             event_tab_threshold=float(args.event_tab_threshold),
             event_string_threshold=float(args.event_string_threshold),
             no_event_string_filter=bool(args.no_event_string_filter),
+            event_decode_mode=str(args.event_decode_mode),
+            event_chord_group_ms=float(args.event_chord_group_ms),
+            use_global_onset_confirmation=bool(args.use_global_onset_confirmation),
+            global_confirm_window_ms=float(args.global_confirm_window_ms),
+            use_global_onset_fallback=bool(args.use_global_onset_fallback),
+            global_fallback_max_notes=int(args.global_fallback_max_notes),
+            repeat_same_fret_policy=str(args.repeat_same_fret_policy),
+            min_repeat_ms=float(args.min_repeat_ms),
+            repeat_onset_threshold=float(args.repeat_onset_threshold),
+            repeat_global_threshold=float(args.repeat_global_threshold),
+            require_global_for_repeats=bool(args.require_global_for_repeats),
+            same_string_any_fret_min_ms=float(args.same_string_any_fret_min_ms),
             onset_positive_class=int(args.onset_positive_class),
             allow_missing_hand_pos=bool(args.allow_missing_hand_pos),
             verbose=bool(args.verbose),
@@ -1791,6 +2779,9 @@ def main():
     print(f"Event string window: +{float(event_string_window_print):.1f} ms")
     print(f"Event tab threshold: {float(args.event_tab_threshold):.3f}")
     print(f"Event string threshold: {float(args.event_string_threshold):.3f}")
+    print(f"Event decode mode: {args.event_decode_mode}")
+    print(f"Global onset threshold: {float(args.global_onset_threshold):.3f}")
+    print(f"Global onset fallback: {bool(args.use_global_onset_fallback)} max_notes={int(args.global_fallback_max_notes)}")
     print(f"Peak picking: {not bool(args.no_peak_picking)}")
 
 

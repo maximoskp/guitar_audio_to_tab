@@ -1,0 +1,104 @@
+architecture: bpm_free_frame_tab_onset_chord_aware_event_assembly
+args:
+  allow_missing_hand_pos: false
+  batch_size: 32
+  config: src/config.yaml
+  dataset_dir: GuitarSet
+  detach_tab_probs_for_event: false
+  device: null
+  epoch: 192
+  event_arpeggio_context_ms: 150.0
+  event_chord_context_ms: 35.0
+  event_fret_loss_weight: 1.0
+  event_head_dropout: 0.25
+  event_head_hidden_dim: 128
+  event_head_kernel_size: 5
+  event_head_tcn_levels: 6
+  event_loss_weight: 0.5
+  event_positive_weight: 10.0
+  event_string_loss_weight: 0.5
+  event_string_positive_weight: 10.0
+  event_type_loss_weight: 0.1
+  freeze_encoder: false
+  freeze_frontend: false
+  global_onset_loss_weight: 0.25
+  global_onset_positive_weight: 10.0
+  hand_hidden_gate_init: null
+  hand_pos_dim: null
+  hand_position_fusion: hidden+prior
+  hand_prior_strength: null
+  hand_span: null
+  lr: null
+  model_root: model
+  n_cores: 1
+  n_folds: 7
+  no_event_tab_probs: false
+  no_onset_raw_features: false
+  npz_dir: data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split
+  onset_dropout: 0.25
+  onset_hidden_dim: 64
+  onset_input_mode: full
+  onset_kernel_size: 3
+  onset_loss_weight: 0.25
+  onset_positive_weight: 10.0
+  onset_raw_dropout: 0.1
+  onset_raw_proj_dim: 64
+  onset_target_mode: hard
+  onset_target_radius_ms: 25.0
+  onset_tcn_levels: 4
+  pin_memory: false
+  pretrained_allow_partial: false
+  pretrained_model: null
+  quantized: false
+  run_name: event_assembly_FULL
+  save_every: 32
+  seed: null
+  tab_loss_weight: 1.0
+  tensorboard_root: tensorboard
+  test_num: 6
+  use_hand_position: true
+base_model_dir: model/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/event_assembly_FULL
+base_tensorboard_dir: tensorboard/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/event_assembly_FULL
+data_path: data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split/*.npz
+detach_tab_probs_for_event: false
+event_arpeggio_context_ms: 150.0
+event_chord_context_ms: 35.0
+event_fret_loss_weight: 1.0
+event_head: chord_aware_noncausal_gated_tcn
+event_head_dropout: 0.25
+event_head_hidden_dim: 128
+event_head_kernel_size: 5
+event_head_tcn_levels: 6
+event_input_uses_tab_probs: true
+event_loss_weight: 0.5
+event_string_loss_weight: 0.5
+event_type_loss_weight: 0.1
+global_onset_loss_weight: 0.25
+hand_pos_dim: 20
+hand_position_fusion: hidden+prior
+hand_prior_strength: 0.35
+hand_span: 4
+npz_dir: data/npz/guitarset_guitartechs_egdb_goat_idmt_handpos_clean/split
+num_npz_files: 5704
+onset_dropout: 0.25
+onset_hidden_dim: 64
+onset_input_mode: full
+onset_kernel_size: 3
+onset_loss_weight: 0.25
+onset_raw_dropout: 0.1
+onset_raw_proj_dim: 64
+onset_tcn_levels: 4
+onset_use_raw_features: true
+outputs:
+- frame_tab_pred
+- frame_onset_logits
+- global_onset_logits
+- event_logits
+- event_string_logits
+- event_fret_logits
+- event_type_logits
+run_name: event_assembly_FULL
+run_tag: guitarset_guitartechs_egdb_goat_idmt_handpos_clean
+use_hand_position: true
+uses_bpm: false
+uses_note_pred: false

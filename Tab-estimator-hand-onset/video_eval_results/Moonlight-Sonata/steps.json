@@ -1,0 +1,1330 @@
+[
+  {
+    "frame": 365,
+    "time": 8.475283446712018,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 8.475283446712018,
+        "frame": 365,
+        "onset_frame": 365,
+        "label_frame": 366,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.530784010887146,
+        "rest_prob": 0.4452996850013733,
+        "string_onset_prob": 0.9590516686439514,
+        "global_onset_prob_nearby": 0.9941467046737671,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 0,
+        "global_step": 0,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 470,
+    "time": 10.913378684807256,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 10.913378684807256,
+        "frame": 470,
+        "onset_frame": 470,
+        "label_frame": 472,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.6536769270896912,
+        "rest_prob": 0.34091484546661377,
+        "string_onset_prob": 0.9672867059707642,
+        "global_onset_prob_nearby": 0.9938380122184753,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 1,
+        "global_step": 1,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 521,
+    "time": 12.097596371882087,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 12.097596371882087,
+        "frame": 521,
+        "onset_frame": 521,
+        "label_frame": 523,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.507465124130249,
+        "rest_prob": 0.4901764988899231,
+        "string_onset_prob": 0.9435901641845703,
+        "global_onset_prob_nearby": 0.9921642541885376,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 2,
+        "global_step": 2,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 554,
+    "time": 12.863854875283447,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 12.863854875283447,
+        "frame": 554,
+        "onset_frame": 554,
+        "label_frame": 554,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.5201547741889954,
+        "rest_prob": 0.4794533848762512,
+        "string_onset_prob": 0.9852392673492432,
+        "global_onset_prob_nearby": 0.9976720213890076,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 3,
+        "global_step": 3,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 573,
+    "time": 13.305034013605443,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 11,
+        "pitch": 66
+      },
+      {
+        "string": 4,
+        "fret": 11,
+        "pitch": 61
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 13.281814058956916,
+        "frame": 572,
+        "onset_frame": 572,
+        "label_frame": 574,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 11,
+        "tab_prob": 0.8232269883155823,
+        "rest_prob": 0.15728574991226196,
+        "string_onset_prob": 0.964232325553894,
+        "global_onset_prob_nearby": 0.9891507625579834,
+        "source": "string_onset_decoder",
+        "pitch": 66,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 4,
+        "global_step": 4,
+        "chord_group_size": 3
+      },
+      {
+        "time": 13.305034013605443,
+        "frame": 573,
+        "onset_frame": 573,
+        "label_frame": 575,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 11,
+        "tab_prob": 0.9525802731513977,
+        "rest_prob": 0.04531261324882507,
+        "string_onset_prob": 0.9720500111579895,
+        "global_onset_prob_nearby": 0.9891507625579834,
+        "source": "string_onset_decoder",
+        "pitch": 61,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 4,
+        "global_step": 4,
+        "chord_group_size": 3
+      },
+      {
+        "time": 13.305034013605443,
+        "frame": 573,
+        "onset_frame": 573,
+        "label_frame": 575,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7466714382171631,
+        "rest_prob": 0.25117090344429016,
+        "string_onset_prob": 0.948021411895752,
+        "global_onset_prob_nearby": 0.9891507625579834,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 4,
+        "global_step": 4,
+        "chord_group_size": 3
+      }
+    ]
+  },
+  {
+    "frame": 589,
+    "time": 13.676553287981859,
+    "notes": [
+      {
+        "string": 2,
+        "fret": 14,
+        "pitch": 73
+      },
+      {
+        "string": 4,
+        "fret": 11,
+        "pitch": 61
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 13.676553287981859,
+        "frame": 589,
+        "onset_frame": 589,
+        "label_frame": 591,
+        "string_index_low_e_first": 4,
+        "string": 2,
+        "fret": 14,
+        "tab_prob": 0.6028765439987183,
+        "rest_prob": 0.37764647603034973,
+        "string_onset_prob": 0.851496696472168,
+        "global_onset_prob_nearby": 0.9876888990402222,
+        "source": "string_onset_decoder",
+        "pitch": 73,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 5,
+        "global_step": 5,
+        "chord_group_size": 3
+      },
+      {
+        "time": 13.676553287981859,
+        "frame": 589,
+        "onset_frame": 589,
+        "label_frame": 589,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 11,
+        "tab_prob": 0.6227522492408752,
+        "rest_prob": 0.11987264454364777,
+        "string_onset_prob": 0.9871886372566223,
+        "global_onset_prob_nearby": 0.9876888990402222,
+        "source": "string_onset_decoder",
+        "pitch": 61,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 5,
+        "global_step": 5,
+        "chord_group_size": 3
+      },
+      {
+        "time": 13.676553287981859,
+        "frame": 589,
+        "onset_frame": 589,
+        "label_frame": 591,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7637172341346741,
+        "rest_prob": 0.23365344107151031,
+        "string_onset_prob": 0.9838104248046875,
+        "global_onset_prob_nearby": 0.9876888990402222,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 5,
+        "global_step": 5,
+        "chord_group_size": 3
+      }
+    ]
+  },
+  {
+    "frame": 607,
+    "time": 14.09451247165533,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 11,
+        "pitch": 66
+      },
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 14.09451247165533,
+        "frame": 607,
+        "onset_frame": 607,
+        "label_frame": 609,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 11,
+        "tab_prob": 0.9473981261253357,
+        "rest_prob": 0.03531176596879959,
+        "string_onset_prob": 0.945334255695343,
+        "global_onset_prob_nearby": 0.9959290623664856,
+        "source": "string_onset_decoder",
+        "pitch": 66,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 6,
+        "global_step": 6,
+        "chord_group_size": 3
+      },
+      {
+        "time": 14.09451247165533,
+        "frame": 607,
+        "onset_frame": 607,
+        "label_frame": 609,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.8659870624542236,
+        "rest_prob": 0.018092263489961624,
+        "string_onset_prob": 0.9915692210197449,
+        "global_onset_prob_nearby": 0.9959290623664856,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 6,
+        "global_step": 6,
+        "chord_group_size": 3
+      },
+      {
+        "time": 14.09451247165533,
+        "frame": 607,
+        "onset_frame": 607,
+        "label_frame": 609,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7946763634681702,
+        "rest_prob": 0.2033696174621582,
+        "string_onset_prob": 0.993986964225769,
+        "global_onset_prob_nearby": 0.9959290623664856,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 6,
+        "global_step": 6,
+        "chord_group_size": 3
+      }
+    ]
+  },
+  {
+    "frame": 624,
+    "time": 14.489251700680272,
+    "notes": [
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 14.489251700680272,
+        "frame": 624,
+        "onset_frame": 624,
+        "label_frame": 626,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.8060494065284729,
+        "rest_prob": 0.19346244633197784,
+        "string_onset_prob": 0.9710861444473267,
+        "global_onset_prob_nearby": 0.9947781562805176,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 7,
+        "global_step": 7,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 642,
+    "time": 14.907210884353741,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 14.883990929705215,
+        "frame": 641,
+        "onset_frame": 641,
+        "label_frame": 643,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7499123811721802,
+        "rest_prob": 0.24722585082054138,
+        "string_onset_prob": 0.9517990946769714,
+        "global_onset_prob_nearby": 0.992206871509552,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 8,
+        "global_step": 8,
+        "chord_group_size": 2
+      },
+      {
+        "time": 14.907210884353741,
+        "frame": 642,
+        "onset_frame": 642,
+        "label_frame": 644,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.87129145860672,
+        "rest_prob": 0.03033604472875595,
+        "string_onset_prob": 0.9897549748420715,
+        "global_onset_prob_nearby": 0.992206871509552,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 8,
+        "global_step": 8,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 657,
+    "time": 15.255510204081633,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      }
+    ],
+    "events": [
+      {
+        "time": 15.255510204081633,
+        "frame": 657,
+        "onset_frame": 657,
+        "label_frame": 659,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.8981736302375793,
+        "rest_prob": 0.07824917137622833,
+        "string_onset_prob": 0.9680275321006775,
+        "global_onset_prob_nearby": 0.9885780811309814,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 9,
+        "global_step": 9,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 916,
+    "time": 21.269478458049885,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 21.269478458049885,
+        "frame": 916,
+        "onset_frame": 916,
+        "label_frame": 916,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.5096256732940674,
+        "rest_prob": 0.47888055443763733,
+        "string_onset_prob": 0.9619327783584595,
+        "global_onset_prob_nearby": 0.995763897895813,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 10,
+        "global_step": 10,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 1138,
+    "time": 26.424308390022677,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 26.424308390022677,
+        "frame": 1138,
+        "onset_frame": 1138,
+        "label_frame": 1138,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.5045771598815918,
+        "rest_prob": 0.48357224464416504,
+        "string_onset_prob": 0.9640542268753052,
+        "global_onset_prob_nearby": 0.9578692317008972,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 11,
+        "global_step": 11,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 1418,
+    "time": 32.92589569160998,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 32.92589569160998,
+        "frame": 1418,
+        "onset_frame": 1418,
+        "label_frame": 1419,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.5949206948280334,
+        "rest_prob": 0.02262178435921669,
+        "string_onset_prob": 0.9757792353630066,
+        "global_onset_prob_nearby": 0.9874774217605591,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 12,
+        "global_step": 12,
+        "chord_group_size": 2
+      },
+      {
+        "time": 32.92589569160998,
+        "frame": 1418,
+        "onset_frame": 1418,
+        "label_frame": 1420,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7852182388305664,
+        "rest_prob": 0.21387995779514313,
+        "string_onset_prob": 0.9673075079917908,
+        "global_onset_prob_nearby": 0.9874774217605591,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 12,
+        "global_step": 12,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 1434,
+    "time": 33.2974149659864,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 33.2974149659864,
+        "frame": 1434,
+        "onset_frame": 1434,
+        "label_frame": 1436,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.8932846188545227,
+        "rest_prob": 0.018810566514730453,
+        "string_onset_prob": 0.9775911569595337,
+        "global_onset_prob_nearby": 0.9929653406143188,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 13,
+        "global_step": 13,
+        "chord_group_size": 2
+      },
+      {
+        "time": 33.2974149659864,
+        "frame": 1434,
+        "onset_frame": 1434,
+        "label_frame": 1436,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.8155698180198669,
+        "rest_prob": 0.18329580128192902,
+        "string_onset_prob": 0.9856593608856201,
+        "global_onset_prob_nearby": 0.9929653406143188,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 13,
+        "global_step": 13,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 1451,
+    "time": 33.69215419501134,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 11,
+        "pitch": 66
+      },
+      {
+        "string": 4,
+        "fret": 11,
+        "pitch": 61
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 33.69215419501134,
+        "frame": 1451,
+        "onset_frame": 1451,
+        "label_frame": 1453,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 11,
+        "tab_prob": 0.7255481481552124,
+        "rest_prob": 0.20464719831943512,
+        "string_onset_prob": 0.9527581930160522,
+        "global_onset_prob_nearby": 0.9963484406471252,
+        "source": "string_onset_decoder",
+        "pitch": 66,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 14,
+        "global_step": 14,
+        "chord_group_size": 3
+      },
+      {
+        "time": 33.69215419501134,
+        "frame": 1451,
+        "onset_frame": 1451,
+        "label_frame": 1451,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 11,
+        "tab_prob": 0.9044576287269592,
+        "rest_prob": 0.054367002099752426,
+        "string_onset_prob": 0.9796178936958313,
+        "global_onset_prob_nearby": 0.9963484406471252,
+        "source": "string_onset_decoder",
+        "pitch": 61,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 14,
+        "global_step": 14,
+        "chord_group_size": 3
+      },
+      {
+        "time": 33.69215419501134,
+        "frame": 1451,
+        "onset_frame": 1451,
+        "label_frame": 1452,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.836759090423584,
+        "rest_prob": 0.16294705867767334,
+        "string_onset_prob": 0.9887250065803528,
+        "global_onset_prob_nearby": 0.9963484406471252,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 14,
+        "global_step": 14,
+        "chord_group_size": 3
+      }
+    ]
+  },
+  {
+    "frame": 1469,
+    "time": 34.11011337868481,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      }
+    ],
+    "events": [
+      {
+        "time": 34.11011337868481,
+        "frame": 1469,
+        "onset_frame": 1469,
+        "label_frame": 1471,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.7239988446235657,
+        "rest_prob": 0.03321724385023117,
+        "string_onset_prob": 0.9881431460380554,
+        "global_onset_prob_nearby": 0.9952351450920105,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 15,
+        "global_step": 15,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 1484,
+    "time": 34.4584126984127,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 34.4584126984127,
+        "frame": 1484,
+        "onset_frame": 1484,
+        "label_frame": 1486,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.8713420033454895,
+        "rest_prob": 0.07769310474395752,
+        "string_onset_prob": 0.9645936489105225,
+        "global_onset_prob_nearby": 0.9801656007766724,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 16,
+        "global_step": 16,
+        "chord_group_size": 2
+      },
+      {
+        "time": 34.4584126984127,
+        "frame": 1484,
+        "onset_frame": 1484,
+        "label_frame": 1486,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.6277250051498413,
+        "rest_prob": 0.3693239688873291,
+        "string_onset_prob": 0.9435096979141235,
+        "global_onset_prob_nearby": 0.9801656007766724,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 16,
+        "global_step": 16,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 2258,
+    "time": 52.43065759637188,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 18,
+        "pitch": 73
+      }
+    ],
+    "events": [
+      {
+        "time": 52.43065759637188,
+        "frame": 2258,
+        "onset_frame": 2258,
+        "label_frame": 2258,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 18,
+        "tab_prob": 0.6105266213417053,
+        "rest_prob": 0.27410557866096497,
+        "string_onset_prob": 0.9656298160552979,
+        "global_onset_prob_nearby": 0.9965631365776062,
+        "source": "string_onset_decoder",
+        "pitch": 73,
+        "repeat_filter_action": "kept_first",
+        "chord_group_id": 17,
+        "global_step": 17,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3084,
+    "time": 71.61034013605442,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 18,
+        "pitch": 73
+      }
+    ],
+    "events": [
+      {
+        "time": 71.61034013605442,
+        "frame": 3084,
+        "onset_frame": 3084,
+        "label_frame": 3084,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 18,
+        "tab_prob": 0.5613207221031189,
+        "rest_prob": 0.31956806778907776,
+        "string_onset_prob": 0.9812644720077515,
+        "global_onset_prob_nearby": 0.9983887672424316,
+        "source": "string_onset_decoder",
+        "pitch": 73,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 18,
+        "global_step": 18,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3136,
+    "time": 72.81777777777778,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 18,
+        "pitch": 73
+      }
+    ],
+    "events": [
+      {
+        "time": 72.81777777777778,
+        "frame": 3136,
+        "onset_frame": 3136,
+        "label_frame": 3136,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 18,
+        "tab_prob": 0.5404148697853088,
+        "rest_prob": 0.3204190731048584,
+        "string_onset_prob": 0.9720582365989685,
+        "global_onset_prob_nearby": 0.9969635605812073,
+        "source": "string_onset_decoder",
+        "pitch": 73,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 19,
+        "global_step": 19,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3414,
+    "time": 79.27292517006804,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 79.27292517006804,
+        "frame": 3414,
+        "onset_frame": 3414,
+        "label_frame": 3414,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.5162302255630493,
+        "rest_prob": 0.46422019600868225,
+        "string_onset_prob": 0.9424251317977905,
+        "global_onset_prob_nearby": 0.9949264526367188,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 20,
+        "global_step": 20,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3810,
+    "time": 88.46802721088436,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 88.46802721088436,
+        "frame": 3810,
+        "onset_frame": 3810,
+        "label_frame": 3810,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.5345571637153625,
+        "rest_prob": 0.46435806155204773,
+        "string_onset_prob": 0.9885768294334412,
+        "global_onset_prob_nearby": 0.9966558218002319,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 21,
+        "global_step": 21,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3861,
+    "time": 89.65224489795918,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 14,
+        "pitch": 64
+      }
+    ],
+    "events": [
+      {
+        "time": 89.65224489795918,
+        "frame": 3861,
+        "onset_frame": 3861,
+        "label_frame": 3863,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 14,
+        "tab_prob": 0.6727179884910583,
+        "rest_prob": 0.32610148191452026,
+        "string_onset_prob": 0.9728472828865051,
+        "global_onset_prob_nearby": 0.9941248297691345,
+        "source": "string_onset_decoder",
+        "pitch": 64,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 22,
+        "global_step": 22,
+        "chord_group_size": 1
+      }
+    ]
+  },
+  {
+    "frame": 3896,
+    "time": 90.4649433106576,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 90.4649433106576,
+        "frame": 3896,
+        "onset_frame": 3896,
+        "label_frame": 3898,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.6952561140060425,
+        "rest_prob": 0.031978361308574677,
+        "string_onset_prob": 0.9830974340438843,
+        "global_onset_prob_nearby": 0.9979346990585327,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 23,
+        "global_step": 23,
+        "chord_group_size": 2
+      },
+      {
+        "time": 90.4649433106576,
+        "frame": 3896,
+        "onset_frame": 3896,
+        "label_frame": 3898,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7210779190063477,
+        "rest_prob": 0.2724628150463104,
+        "string_onset_prob": 0.9758289456367493,
+        "global_onset_prob_nearby": 0.9979346990585327,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 23,
+        "global_step": 23,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 3914,
+    "time": 90.88290249433106,
+    "notes": [
+      {
+        "string": 3,
+        "fret": 11,
+        "pitch": 66
+      },
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 90.85968253968254,
+        "frame": 3913,
+        "onset_frame": 3913,
+        "label_frame": 3915,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7208595275878906,
+        "rest_prob": 0.2759844660758972,
+        "string_onset_prob": 0.9860705733299255,
+        "global_onset_prob_nearby": 0.9978468418121338,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 24,
+        "global_step": 24,
+        "chord_group_size": 3
+      },
+      {
+        "time": 90.88290249433106,
+        "frame": 3914,
+        "onset_frame": 3914,
+        "label_frame": 3916,
+        "string_index_low_e_first": 3,
+        "string": 3,
+        "fret": 11,
+        "tab_prob": 0.9533833861351013,
+        "rest_prob": 0.030735190957784653,
+        "string_onset_prob": 0.9582651257514954,
+        "global_onset_prob_nearby": 0.9978468418121338,
+        "source": "string_onset_decoder",
+        "pitch": 66,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 24,
+        "global_step": 24,
+        "chord_group_size": 3
+      },
+      {
+        "time": 90.88290249433106,
+        "frame": 3914,
+        "onset_frame": 3914,
+        "label_frame": 3916,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.9172002077102661,
+        "rest_prob": 0.022536886855959892,
+        "string_onset_prob": 0.9849306344985962,
+        "global_onset_prob_nearby": 0.9978468418121338,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 24,
+        "global_step": 24,
+        "chord_group_size": 3
+      }
+    ]
+  },
+  {
+    "frame": 3932,
+    "time": 91.30086167800454,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 11,
+        "pitch": 61
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 91.27764172335601,
+        "frame": 3931,
+        "onset_frame": 3931,
+        "label_frame": 3933,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7874724864959717,
+        "rest_prob": 0.2113841325044632,
+        "string_onset_prob": 0.984043538570404,
+        "global_onset_prob_nearby": 0.9987444877624512,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 25,
+        "global_step": 25,
+        "chord_group_size": 2
+      },
+      {
+        "time": 91.30086167800454,
+        "frame": 3932,
+        "onset_frame": 3932,
+        "label_frame": 3933,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 11,
+        "tab_prob": 0.7994810342788696,
+        "rest_prob": 0.07058156281709671,
+        "string_onset_prob": 0.9638546109199524,
+        "global_onset_prob_nearby": 0.9987444877624512,
+        "source": "string_onset_decoder",
+        "pitch": 61,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 25,
+        "global_step": 25,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 3947,
+    "time": 91.64916099773242,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 91.64916099773242,
+        "frame": 3947,
+        "onset_frame": 3947,
+        "label_frame": 3948,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.7685900926589966,
+        "rest_prob": 0.0915583074092865,
+        "string_onset_prob": 0.981878936290741,
+        "global_onset_prob_nearby": 0.9919446110725403,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 26,
+        "global_step": 26,
+        "chord_group_size": 2
+      },
+      {
+        "time": 91.64916099773242,
+        "frame": 3947,
+        "onset_frame": 3947,
+        "label_frame": 3949,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7197121977806091,
+        "rest_prob": 0.27735888957977295,
+        "string_onset_prob": 0.9792490601539612,
+        "global_onset_prob_nearby": 0.9919446110725403,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 26,
+        "global_step": 26,
+        "chord_group_size": 2
+      }
+    ]
+  },
+  {
+    "frame": 3964,
+    "time": 92.04390022675737,
+    "notes": [
+      {
+        "string": 4,
+        "fret": 12,
+        "pitch": 62
+      },
+      {
+        "string": 5,
+        "fret": 12,
+        "pitch": 57
+      }
+    ],
+    "events": [
+      {
+        "time": 92.04390022675737,
+        "frame": 3964,
+        "onset_frame": 3964,
+        "label_frame": 3966,
+        "string_index_low_e_first": 2,
+        "string": 4,
+        "fret": 12,
+        "tab_prob": 0.8602793216705322,
+        "rest_prob": 0.03803574666380882,
+        "string_onset_prob": 0.9803882837295532,
+        "global_onset_prob_nearby": 0.9852418303489685,
+        "source": "string_onset_decoder",
+        "pitch": 62,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 27,
+        "global_step": 27,
+        "chord_group_size": 2
+      },
+      {
+        "time": 92.04390022675737,
+        "frame": 3964,
+        "onset_frame": 3964,
+        "label_frame": 3966,
+        "string_index_low_e_first": 1,
+        "string": 5,
+        "fret": 12,
+        "tab_prob": 0.7536285519599915,
+        "rest_prob": 0.24401456117630005,
+        "string_onset_prob": 0.9562333822250366,
+        "global_onset_prob_nearby": 0.9852418303489685,
+        "source": "string_onset_decoder",
+        "pitch": 57,
+        "repeat_filter_action": "kept_repeat",
+        "chord_group_id": 27,
+        "global_step": 27,
+        "chord_group_size": 2
+      }
+    ]
+  }
+]
