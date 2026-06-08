@@ -165,6 +165,66 @@ CUDA_VISIBLE_DEVICES=0 python src/train.py   --npz-dir data/npz/guitarset_handpo
 
 CUDA_VISIBLE_DEVICES=2 python src/train.py   --npz-dir data/npz/guitarset/split   --run-name guitarset   --target-balanced-sampling   --target-balanced-validation   --use-hand-position   --hand-position-fusion prior   --n-folds 6   --epoch 192
 
+CUDA_VISIBLE_DEVICES=2 python src/predict.py   guitarset/guitarset   192   --all-folds   --n-folds 6   --npz-dir data/npz/guitarset/split   --device cuda   --allow-missing-hand-pos   --event-decode-mode string_onset   --event-chord-group-ms 55   --event-label-delay-ms 20   --event-label-window-ms 90   --event-string-window-ms 50   --event-tab-threshold 0.30   --onset-threshold 0.80   --global-onset-threshold 0.80   --peak-pre-max-ms 30   --peak-post-max-ms 30   --peak-combine-ms 30   --use-global-onset-fallback   --global-fallback-max-notes 2   --repeat-same-fret-policy strong_onset   --min-repeat-ms 250   --repeat-onset-threshold 0.94   --repeat-global-threshold 0.75   --same-string-any-fret-min-ms 80   -v 
+
+
+CUDA_VISIBLE_DEVICES=2 python src/train.py   --npz-dir data/npz/egdb/split   --run-name egdb   --target-balanced-sampling   --target-balanced-validatio
+n   --use-hand-position   --hand-position-fusion prior --test-num 6   --n-folds 7   --epoch 192 --allow-missing-hand-pos 
+
+CUDA_VISIBLE_DEVICES=2 python src/predict.py \
+  egdb/egdb \
+  192 \
+  --all-folds \
+  --n-folds 6 \
+  --npz-dir data/npz/guitarset/split \
+  --device cuda \
+  --allow-missing-hand-pos \
+  -v
+
+
+CUDA_VISIBLE_DEVICES=2 python src/predict.py \
+  guitarset/guitarset \
+  192 \
+  --all-folds \
+  --n-folds 6 \
+  --npz-dir data/npz/egdb/split \
+  --device cuda \
+  --allow-missing-hand-pos \
+  -v
+
+CUDA_VISIBLE_DEVICES=2 python src/predict.py \
+  guitarset_handpos_clean/guitarset \
+  192 
+  [bad]
+
+----------------------------------------------
+
+ CUDA_VISIBLE_DEVICES=0 python src/train.py   --npz-dir data/npz/guitarset_handpos_clean/split   --run-name guitarset_handpos   --use-hand-position    --hand-position-fusion hidden+prior --n-folds 6 --epoch 192 
+
+CUDA_VISIBLE_DEVICES=0 python src/predict.py  guitarset_handpos_clean/guitarset_handpos  192    --npz-dir data/npz/guitarset_handpos_clean/split --device cuda 
+
+
+----------------------------------
+<!-- IDMT no-hand test -->
+
+CUDA_VISIBLE_DEVICES=0 python src/predict.py  guitarset_guitartechs_egdb_goat_idmt_reverb_aug_handpos_clean/guitarset_guitartechs_egdb_goat_idmt_reverb_aug_no_hand  192 --allow-missing-hand-pos --n-folds 7 --test-num 6  --npz-dir data/npz/idmt_06/split
+[res]
+notation_edit_avg_sim   = 0.4594
+pitch_notation_edit_avg_sim = 0.7187
+notation_lcs_avg_sim = 0.2811
+pitch_notation_lcs_avg_sim = 0.5759
+notation_overlap_avg_sim = 0.4710
+pitch_notation_overlap_avg_sim = 0.7165
+
+
+
+
+
+
+
+
+
+
 <!-- COMPACT -->
 
 Compact audio-visual frame/onset model

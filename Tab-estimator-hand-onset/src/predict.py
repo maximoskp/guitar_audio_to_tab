@@ -1494,6 +1494,158 @@ def pitch_notation_edit_similarity(
     )
 
 
+
+def sonority_lcs_length(
+    pred_sonorities: Sequence[frozenset],
+    gt_sonorities: Sequence[frozenset],
+) -> int:
+    """
+    Longest common subsequence length over exact sonority/chord tokens.
+
+    A sonority token matches only if the whole set is identical. This ignores
+    absolute onset times and rewards preservation of symbolic ordering.
+    """
+    n = len(pred_sonorities)
+    m = len(gt_sonorities)
+    if n == 0 or m == 0:
+        return 0
+
+    dp = np.zeros((n + 1, m + 1), dtype=np.int64)
+    for i in range(1, n + 1):
+        a = pred_sonorities[i - 1]
+        for j in range(1, m + 1):
+            if a == gt_sonorities[j - 1]:
+                dp[i, j] = dp[i - 1, j - 1] + 1
+            else:
+                dp[i, j] = max(dp[i - 1, j], dp[i, j - 1])
+    return int(dp[n, m])
+
+
+def sonority_lcs_similarity_from_sequences(
+    pred_sonorities: Sequence[frozenset],
+    gt_sonorities: Sequence[frozenset],
+) -> Tuple[float, int, int]:
+    """
+    Exact-sonority LCS similarity.
+
+    Returns:
+        similarity, lcs_length, normalizer
+
+    similarity = LCS_length / max(len(pred_sequence), len(gt_sequence)).
+    Empty prediction and empty reference give similarity 1.0.
+    """
+    normalizer = max(len(pred_sonorities), len(gt_sonorities))
+    if normalizer == 0:
+        return 1.0, 0, 0
+    lcs_len = sonority_lcs_length(pred_sonorities, gt_sonorities)
+    return float(lcs_len) / float(normalizer), int(lcs_len), int(normalizer)
+
+
+def sonority_jaccard(a: frozenset, b: frozenset) -> float:
+    """Jaccard overlap between two sonority/chord tokens."""
+    a_set = set(a)
+    b_set = set(b)
+    union = len(a_set | b_set)
+    if union == 0:
+        return 1.0
+    return float(len(a_set & b_set)) / float(union)
+
+
+def sonority_overlap_alignment_score(
+    pred_sonorities: Sequence[frozenset],
+    gt_sonorities: Sequence[frozenset],
+) -> float:
+    """
+    Global symbolic alignment score using sonority Jaccard overlap.
+
+    This is an LCS-like dynamic program where matching two sonorities yields a
+    soft score in [0, 1] instead of a binary exact-match score. Gaps have zero
+    score. The resulting score is normalized outside this function.
+    """
+    n = len(pred_sonorities)
+    m = len(gt_sonorities)
+    if n == 0 or m == 0:
+        return 0.0
+
+    dp = np.zeros((n + 1, m + 1), dtype=np.float64)
+    for i in range(1, n + 1):
+        a = pred_sonorities[i - 1]
+        for j in range(1, m + 1):
+            score = sonority_jaccard(a, gt_sonorities[j - 1])
+            dp[i, j] = max(
+                dp[i - 1, j],
+                dp[i, j - 1],
+                dp[i - 1, j - 1] + score,
+            )
+    return float(dp[n, m])
+
+
+def sonority_overlap_alignment_similarity_from_sequences(
+    pred_sonorities: Sequence[frozenset],
+    gt_sonorities: Sequence[frozenset],
+) -> Tuple[float, float, int]:
+    """
+    Soft sonority-overlap similarity after symbolic sequence alignment.
+
+    Returns:
+        similarity, alignment_score, normalizer
+
+    similarity = max_alignment_score / max(len(pred_sequence), len(gt_sequence)).
+    Empty prediction and empty reference give similarity 1.0.
+    """
+    normalizer = max(len(pred_sonorities), len(gt_sonorities))
+    if normalizer == 0:
+        return 1.0, 0.0, 0
+    score = sonority_overlap_alignment_score(pred_sonorities, gt_sonorities)
+    similarity = float(score) / float(normalizer)
+    similarity = max(0.0, min(1.0, similarity))
+    return float(similarity), float(score), int(normalizer)
+
+
+def notation_lcs_and_overlap_metrics(
+    pred_events: Sequence[Tuple[int, int, int]],
+    gt_events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> Tuple[float, int, int, float, float, int]:
+    """
+    String-fret symbolic sequence metrics.
+
+    Returns:
+        lcs_similarity, lcs_length, lcs_normalizer,
+        overlap_similarity, overlap_score, overlap_normalizer
+    """
+    pred_seq = events_to_notation_sonorities(pred_events, chord_group_frames=chord_group_frames)
+    gt_seq = events_to_notation_sonorities(gt_events, chord_group_frames=chord_group_frames)
+    lcs_sim, lcs_len, lcs_norm = sonority_lcs_similarity_from_sequences(pred_seq, gt_seq)
+    overlap_sim, overlap_score, overlap_norm = sonority_overlap_alignment_similarity_from_sequences(pred_seq, gt_seq)
+    return (
+        float(lcs_sim), int(lcs_len), int(lcs_norm),
+        float(overlap_sim), float(overlap_score), int(overlap_norm),
+    )
+
+
+def pitch_notation_lcs_and_overlap_metrics(
+    pred_events: Sequence[Tuple[int, int, int]],
+    gt_events: Sequence[Tuple[int, int, int]],
+    chord_group_frames: int = 1,
+) -> Tuple[float, int, int, float, float, int]:
+    """
+    Pitch symbolic sequence metrics, ignoring string-fret spelling.
+
+    Returns:
+        lcs_similarity, lcs_length, lcs_normalizer,
+        overlap_similarity, overlap_score, overlap_normalizer
+    """
+    pred_seq = events_to_pitch_sonorities(pred_events, chord_group_frames=chord_group_frames)
+    gt_seq = events_to_pitch_sonorities(gt_events, chord_group_frames=chord_group_frames)
+    lcs_sim, lcs_len, lcs_norm = sonority_lcs_similarity_from_sequences(pred_seq, gt_seq)
+    overlap_sim, overlap_score, overlap_norm = sonority_overlap_alignment_similarity_from_sequences(pred_seq, gt_seq)
+    return (
+        float(lcs_sim), int(lcs_len), int(lcs_norm),
+        float(overlap_sim), float(overlap_score), int(overlap_norm),
+    )
+
+
 # -----------------------------------------------------------------------------
 # Main scoring
 # -----------------------------------------------------------------------------
@@ -1678,6 +1830,21 @@ def calc_score(
     pitch_notation_edit_pred_sonorities_sum = 0
     pitch_notation_edit_gt_sonorities_sum = 0
     pitch_notation_edit_matched_capacity_sum = 0
+
+    # Exact-sonority LCS and soft sonority-overlap alignment metrics.
+    notation_lcs_similarity_sum = 0.0
+    notation_lcs_length_sum = 0
+    notation_lcs_normalizer_sum = 0
+    notation_overlap_similarity_sum = 0.0
+    notation_overlap_score_sum = 0.0
+    notation_overlap_normalizer_sum = 0
+
+    pitch_notation_lcs_similarity_sum = 0.0
+    pitch_notation_lcs_length_sum = 0
+    pitch_notation_lcs_normalizer_sum = 0
+    pitch_notation_overlap_similarity_sum = 0.0
+    pitch_notation_overlap_score_sum = 0.0
+    pitch_notation_overlap_normalizer_sum = 0
 
     for npz_filename in tqdm.tqdm(test_data_list):
         npz_file = np.load(npz_filename, allow_pickle=True)
@@ -1954,6 +2121,44 @@ def calc_score(
         pitch_notation_edit_gt_sonorities_sum += pitch_notation_gt_sonorities
         pitch_notation_edit_matched_capacity_sum += pitch_notation_matched_capacity
 
+        (
+            notation_lcs_similarity_value,
+            notation_lcs_length_value,
+            notation_lcs_normalizer_value,
+            notation_overlap_similarity_value,
+            notation_overlap_score_value,
+            notation_overlap_normalizer_value,
+        ) = notation_lcs_and_overlap_metrics(
+            pred_events,
+            gt_events,
+            chord_group_frames=event_chord_group_frames,
+        )
+        notation_lcs_similarity_sum += notation_lcs_similarity_value
+        notation_lcs_length_sum += notation_lcs_length_value
+        notation_lcs_normalizer_sum += notation_lcs_normalizer_value
+        notation_overlap_similarity_sum += notation_overlap_similarity_value
+        notation_overlap_score_sum += notation_overlap_score_value
+        notation_overlap_normalizer_sum += notation_overlap_normalizer_value
+
+        (
+            pitch_notation_lcs_similarity_value,
+            pitch_notation_lcs_length_value,
+            pitch_notation_lcs_normalizer_value,
+            pitch_notation_overlap_similarity_value,
+            pitch_notation_overlap_score_value,
+            pitch_notation_overlap_normalizer_value,
+        ) = pitch_notation_lcs_and_overlap_metrics(
+            pred_events,
+            gt_events,
+            chord_group_frames=event_chord_group_frames,
+        )
+        pitch_notation_lcs_similarity_sum += pitch_notation_lcs_similarity_value
+        pitch_notation_lcs_length_sum += pitch_notation_lcs_length_value
+        pitch_notation_lcs_normalizer_sum += pitch_notation_lcs_normalizer_value
+        pitch_notation_overlap_similarity_sum += pitch_notation_overlap_similarity_value
+        pitch_notation_overlap_score_sum += pitch_notation_overlap_score_value
+        pitch_notation_overlap_normalizer_sum += pitch_notation_overlap_normalizer_value
+
         # ------------------------------------------------------------------
         # Save per-file predictions.
         # ------------------------------------------------------------------
@@ -1996,6 +2201,18 @@ def calc_score(
             pitch_notation_edit_normalizer=np.asarray([int(pitch_notation_edit_normalizer_value)], dtype=np.int64),
             pitch_notation_pred_sonorities=np.asarray([int(pitch_notation_pred_sonorities)], dtype=np.int64),
             pitch_notation_gt_sonorities=np.asarray([int(pitch_notation_gt_sonorities)], dtype=np.int64),
+            notation_lcs_similarity=np.asarray([float(notation_lcs_similarity_value)], dtype=np.float32),
+            notation_lcs_length=np.asarray([int(notation_lcs_length_value)], dtype=np.int64),
+            notation_lcs_normalizer=np.asarray([int(notation_lcs_normalizer_value)], dtype=np.int64),
+            notation_overlap_alignment_similarity=np.asarray([float(notation_overlap_similarity_value)], dtype=np.float32),
+            notation_overlap_alignment_score=np.asarray([float(notation_overlap_score_value)], dtype=np.float32),
+            notation_overlap_alignment_normalizer=np.asarray([int(notation_overlap_normalizer_value)], dtype=np.int64),
+            pitch_notation_lcs_similarity=np.asarray([float(pitch_notation_lcs_similarity_value)], dtype=np.float32),
+            pitch_notation_lcs_length=np.asarray([int(pitch_notation_lcs_length_value)], dtype=np.int64),
+            pitch_notation_lcs_normalizer=np.asarray([int(pitch_notation_lcs_normalizer_value)], dtype=np.int64),
+            pitch_notation_overlap_alignment_similarity=np.asarray([float(pitch_notation_overlap_similarity_value)], dtype=np.float32),
+            pitch_notation_overlap_alignment_score=np.asarray([float(pitch_notation_overlap_score_value)], dtype=np.float32),
+            pitch_notation_overlap_alignment_normalizer=np.asarray([int(pitch_notation_overlap_normalizer_value)], dtype=np.int64),
             frame_seconds=np.asarray([frame_seconds], dtype=np.float32),
             onset_tolerance_ms=np.asarray([float(onset_tolerance_ms)], dtype=np.float32),
             event_tolerance_ms=np.asarray([float(event_tolerance_ms)], dtype=np.float32),
@@ -2102,6 +2319,20 @@ def calc_score(
     )
     pitch_notation_edit_micro_similarity = max(0.0, min(1.0, float(pitch_notation_edit_micro_similarity)))
 
+    notation_lcs_avg_similarity = notation_lcs_similarity_sum / n_files
+    notation_lcs_micro_similarity = safe_ratio(notation_lcs_length_sum, notation_lcs_normalizer_sum) if notation_lcs_normalizer_sum > 0 else 1.0
+    notation_lcs_micro_similarity = max(0.0, min(1.0, float(notation_lcs_micro_similarity)))
+    notation_overlap_avg_similarity = notation_overlap_similarity_sum / n_files
+    notation_overlap_micro_similarity = safe_ratio(notation_overlap_score_sum, notation_overlap_normalizer_sum) if notation_overlap_normalizer_sum > 0 else 1.0
+    notation_overlap_micro_similarity = max(0.0, min(1.0, float(notation_overlap_micro_similarity)))
+
+    pitch_notation_lcs_avg_similarity = pitch_notation_lcs_similarity_sum / n_files
+    pitch_notation_lcs_micro_similarity = safe_ratio(pitch_notation_lcs_length_sum, pitch_notation_lcs_normalizer_sum) if pitch_notation_lcs_normalizer_sum > 0 else 1.0
+    pitch_notation_lcs_micro_similarity = max(0.0, min(1.0, float(pitch_notation_lcs_micro_similarity)))
+    pitch_notation_overlap_avg_similarity = pitch_notation_overlap_similarity_sum / n_files
+    pitch_notation_overlap_micro_similarity = safe_ratio(pitch_notation_overlap_score_sum, pitch_notation_overlap_normalizer_sum) if pitch_notation_overlap_normalizer_sum > 0 else 1.0
+    pitch_notation_overlap_micro_similarity = max(0.0, min(1.0, float(pitch_notation_overlap_micro_similarity)))
+
     if verbose:
         print(f"frame_avg_tab_p/r/f       = {frame_avg_p:.4f}, {frame_avg_r:.4f}, {frame_avg_f:.4f}")
         print(f"frame_avg_pitch_p/r/f     = {frame_pitch_avg_p:.4f}, {frame_pitch_avg_r:.4f}, {frame_pitch_avg_f:.4f}")
@@ -2123,6 +2354,14 @@ def calc_score(
         print(f"pitch_notation_edit_avg_similarity   = {pitch_notation_edit_avg_similarity:.4f}")
         print(f"pitch_notation_edit_micro_similarity = {pitch_notation_edit_micro_similarity:.4f}")
         print(f"pitch notation edit distance/normalizer = {pitch_notation_edit_distance_sum}, {pitch_notation_edit_normalizer_sum}")
+        print(f"notation_lcs_avg_similarity   = {notation_lcs_avg_similarity:.4f}")
+        print(f"notation_lcs_micro_similarity = {notation_lcs_micro_similarity:.4f}")
+        print(f"pitch_notation_lcs_avg_similarity   = {pitch_notation_lcs_avg_similarity:.4f}")
+        print(f"pitch_notation_lcs_micro_similarity = {pitch_notation_lcs_micro_similarity:.4f}")
+        print(f"notation_overlap_avg_similarity   = {notation_overlap_avg_similarity:.4f}")
+        print(f"notation_overlap_micro_similarity = {notation_overlap_micro_similarity:.4f}")
+        print(f"pitch_notation_overlap_avg_similarity   = {pitch_notation_overlap_avg_similarity:.4f}")
+        print(f"pitch_notation_overlap_micro_similarity = {pitch_notation_overlap_micro_similarity:.4f}")
         print(f"event TP/FP/FN            = {event_sum_tp}, {event_sum_fp}, {event_sum_fn}")
         print(f"event pitch TP/FP/FN      = {event_pitch_sum_tp}, {event_pitch_sum_fp}, {event_pitch_sum_fn}")
 
@@ -2140,6 +2379,10 @@ def calc_score(
     print(f"event_avg_tdr           = {event_avg_tdr:.4f}")
     print(f"notation_edit_avg_sim   = {notation_edit_avg_similarity:.4f}")
     print(f"pitch_notation_edit_avg_sim = {pitch_notation_edit_avg_similarity:.4f}")
+    print(f"notation_lcs_avg_sim = {notation_lcs_avg_similarity:.4f}")
+    print(f"pitch_notation_lcs_avg_sim = {pitch_notation_lcs_avg_similarity:.4f}")
+    print(f"notation_overlap_avg_sim = {notation_overlap_avg_similarity:.4f}")
+    print(f"pitch_notation_overlap_avg_sim = {pitch_notation_overlap_avg_similarity:.4f}")
     print()
 
     result = pd.DataFrame(
@@ -2257,6 +2500,22 @@ def calc_score(
             pitch_notation_edit_pred_sonorities_sum,
             pitch_notation_edit_gt_sonorities_sum,
             pitch_notation_edit_matched_capacity_sum,
+            notation_lcs_avg_similarity,
+            notation_lcs_micro_similarity,
+            notation_lcs_length_sum,
+            notation_lcs_normalizer_sum,
+            pitch_notation_lcs_avg_similarity,
+            pitch_notation_lcs_micro_similarity,
+            pitch_notation_lcs_length_sum,
+            pitch_notation_lcs_normalizer_sum,
+            notation_overlap_avg_similarity,
+            notation_overlap_micro_similarity,
+            notation_overlap_score_sum,
+            notation_overlap_normalizer_sum,
+            pitch_notation_overlap_avg_similarity,
+            pitch_notation_overlap_micro_similarity,
+            pitch_notation_overlap_score_sum,
+            pitch_notation_overlap_normalizer_sum,
         ]],
         columns=[
             "frame_step_ms",
@@ -2369,6 +2628,22 @@ def calc_score(
             "pitch_notation_edit_pred_sonorities",
             "pitch_notation_edit_gt_sonorities",
             "pitch_notation_edit_matched_capacity",
+            "notation_lcs_avg_similarity",
+            "notation_lcs_micro_similarity",
+            "notation_lcs_length",
+            "notation_lcs_normalizer",
+            "pitch_notation_lcs_avg_similarity",
+            "pitch_notation_lcs_micro_similarity",
+            "pitch_notation_lcs_length",
+            "pitch_notation_lcs_normalizer",
+            "notation_overlap_avg_similarity",
+            "notation_overlap_micro_similarity",
+            "notation_overlap_score",
+            "notation_overlap_normalizer",
+            "pitch_notation_overlap_avg_similarity",
+            "pitch_notation_overlap_micro_similarity",
+            "pitch_notation_overlap_score",
+            "pitch_notation_overlap_normalizer",
         ],
         index=[f"No{fold_id}"],
     )
@@ -2406,13 +2681,14 @@ def parse_args():
         "--test-num",
         type=int,
         default=0,
-        help="Run one test fold. Example: --test-num 0 uses 00_*.npz.",
+        help="Run one test fold. Example: --test-num 0 uses 00_*.npz. Ignored when --all-folds is enabled.",
     )
 
     parser.add_argument(
         "--all-folds",
         action="store_true",
-        help="Evaluate all folds from 0 to --n-folds-1 instead of only --test-num.",
+        default=False,
+        help="Evaluate all folds from 0 to --n-folds-1 instead of only --test-num. Default: true.",
     )
 
     parser.add_argument(
@@ -2424,7 +2700,7 @@ def parse_args():
 
     parser.add_argument(
         "--npz-dir",
-        default=None,
+        default="data/npz/egdb/split",
         help=(
             "NPZ split directory to evaluate. If omitted, reads "
             "model/<run>/run_metadata.yaml when available."
@@ -2433,23 +2709,24 @@ def parse_args():
 
     parser.add_argument(
         "--device",
-        default="cpu",
+        default="cuda",
         help="Device to use. Example: cpu, cuda, cuda:0. Default: cpu.",
     )
 
     parser.add_argument(
         "--allow-missing-hand-pos",
         action="store_true",
+        default=True,
         help=(
             "For hand-conditioned checkpoints, use uniform frame hand priors if an NPZ "
-            "is missing frame_hand_pos. Debug only; do not use for final scores."
+            "is missing frame_hand_pos. Default: enabled for cross-dataset evaluation."
         ),
     )
 
     parser.add_argument(
         "--onset-threshold",
         type=float,
-        default=0.5,
+        default=0.80,
         help="Threshold for sigmoid(onset_logits). Default: 0.5.",
     )
 
@@ -2493,14 +2770,14 @@ def parse_args():
     parser.add_argument(
         "--use-global-onset-fallback",
         action="store_true",
-        default=False,
+        default=True,
         help="Use strong global onsets to recover missing string-fret events.",
     )
 
     parser.add_argument(
         "--global-fallback-max-notes",
         type=int,
-        default=1,
+        default=2,
         help="Maximum fallback events per global onset. Default: 1.",
     )
 
@@ -2583,14 +2860,14 @@ def parse_args():
     parser.add_argument(
         "--peak-pre-max-ms",
         type=float,
-        default=50.0,
+        default=30.0,
         help="Past context in ms for local-maximum peak-picking. Default: 50 ms.",
     )
 
     parser.add_argument(
         "--peak-post-max-ms",
         type=float,
-        default=50.0,
+        default=30.0,
         help="Future context in ms for local-maximum peak-picking. Default: 50 ms.",
     )
 
@@ -2625,7 +2902,7 @@ def parse_args():
     parser.add_argument(
         "--event-label-delay-ms",
         type=float,
-        default=0.0,
+        default=20.0,
         help=(
             "Delay after each global onset before reading frame_tab labels, in ms. "
             "Use ~20-25 ms to skip unstable attack frames. Default: 0 ms."
@@ -2635,14 +2912,14 @@ def parse_args():
     parser.add_argument(
         "--event-label-window-ms",
         type=float,
-        default=50.0,
+        default=90.0,
         help="Post-delay window used to choose fret/string from frame_tab, in ms. Default: +50 ms.",
     )
 
     parser.add_argument(
         "--event-string-window-ms",
         type=float,
-        default=None,
+        default=50.0,
         help=(
             "Window after each global onset used for per-string onset support, in ms. "
             "Default: same as --event-label-window-ms."
@@ -2652,7 +2929,7 @@ def parse_args():
     parser.add_argument(
         "--event-tab-threshold",
         type=float,
-        default=0.50,
+        default=0.30,
         help="Minimum non-rest frame_tab probability needed to emit a note event. Default: 0.50.",
     )
 
@@ -2673,8 +2950,8 @@ def parse_args():
         "-v",
         "--verbose",
         action="store_true",
-        default=False,
-        help="Print detailed information.",
+        default=True,
+        help="Print detailed information. Default: true.",
     )
 
     return parser.parse_args()
